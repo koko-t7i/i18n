@@ -5,23 +5,18 @@
 [简体中文](README.zh-CN.md)
 
 An agent skill for [Claude Code](https://claude.com/claude-code). Subagents write the prose;
-scripts handle everything that must not be left to a model — chunking, incremental caching,
-layout resolution, link rewriting, and a structural gate that blocks bad output before it
-reaches your repo. No translation API, no API keys.
+scripts do everything that must not be left to a model. No translation API, no API keys.
 
 ## Why not just ask the model to translate the file?
 
-Because a one-shot translation is right once and wrong forever after. Three things go wrong,
-and all three are silent:
+A one-shot translation is right once and wrong forever after. Three things go wrong, and all
+three are silent:
 
-| Failure | What actually happens |
-|---|---|
-| **Drift** | You fix a typo in `README.md`. `README.zh-CN.md` still describes last month's behaviour, and nothing tells you. |
-| **Structure damage** | The model translates a flag name inside backticks, or renders `{count}` as `{数量}`. The doc still looks fine; the copy-pasted command no longer runs. |
-| **Terminology drift** | "skill" is 技能 in one paragraph and 技巧 three paragraphs later. |
-
-This skill makes each one mechanical: content hashes detect drift, a verifier fails the run
-on structure damage, and a glossary with a `forbid` list pins terminology.
+| Failure | What happens | Caught by |
+|---|---|---|
+| **Drift** | You fix a typo in `README.md`; the translation still describes last month's behaviour | content hashes |
+| **Structure damage** | A flag name inside backticks gets translated, or `{count}` becomes `{数量}` — the doc looks fine, the copied command breaks | the verifier |
+| **Terminology drift** | "skill" is 技能 in one paragraph and 技巧 three paragraphs later | a glossary `forbid` list |
 
 ## Install
 
@@ -30,27 +25,18 @@ git clone git@github.com:koko-t7i/i18n.git ~/icode/skills/i18n
 ln -s ~/icode/skills/i18n/i18n ~/.claude/skills/i18n
 ```
 
-Needs [`uv`](https://docs.astral.sh/uv/) on `PATH`. It supplies the two dependencies
-(`markdown-it-py`, `pyyaml`) per-run and installs nothing globally, so there is no setup step.
-
-Without `uv` it falls back to the system `python3` and runs as far as that interpreter's
-libraries allow: no `markdown-it-py` degrades fence detection to a regex scanner with a
-warning, and no `pyyaml` stops the YAML resource path rather than guessing at the syntax.
+Needs [`uv`](https://docs.astral.sh/uv/) on `PATH`; it supplies `markdown-it-py` and `pyyaml`
+per-run and installs nothing globally. Without `uv` it falls back to the system `python3`,
+where a missing `markdown-it-py` degrades fence detection to a regex scanner and a missing
+`pyyaml` stops the YAML resource path.
 
 ## Use
 
-Just ask:
+Just ask — *把 README 和 docs 翻译成中文*, *sync the Japanese docs*, *check the translations
+still match*, *re-translate the installation guide from scratch*.
 
-> 把 README 和 docs 翻译成中文
-
-> sync the Japanese docs
-
-> check the translations still match
-
-> re-translate the installation guide from scratch
-
-Ask again later and anything whose source has not changed is skipped. Translations you edited
-by hand are detected and never overwritten without you saying so.
+Ask again later and unchanged files are skipped. Translations you edited by hand are detected
+and never overwritten without you saying so.
 
 ## What it handles
 
@@ -58,10 +44,9 @@ by hand are detected and never overwritten without you saying so.
 |---|---|
 | **Documentation** | `.md`, `.mdx`, `.markdown` — README, `docs/**`, `SKILL.md` |
 | **Resources** | `.json`, `.yaml`/`.yml`, `.properties`, `.po`/`.pot` |
-| **Not handled** | source-code comments, user-facing strings inside source code, docs-site config (`mkdocs.yml` nav, `docusaurus.config.js`) |
+| **Not handled** | source-code comments, strings inside source code, docs-site config (`mkdocs.yml` nav, `docusaurus.config.js`) |
 
-For Docusaurus, translate `i18n/<locale>/**.json` instead — that is a resource file and fully
-supported. See [`references/resources.md`](i18n/references/resources.md).
+For Docusaurus translate `i18n/<locale>/**.json` instead — a resource file, fully supported.
 
 ## What gets checked
 
@@ -69,33 +54,26 @@ Every translation is compared against its source before it is accepted. These fa
 
 | Check | Asserts |
 |---|---|
-| `X-INLINE` | inline code spans are byte-identical — `` `--retries` `` stayed `` `--retries` `` |
+| `X-INLINE` | inline code is byte-identical — the check that earns its keep, since `` `{数量}` `` passes every other one and breaks the copied command |
 | `X-TOKEN` | placeholders match — `{count}`, `%s`, `${VAR}`, `{{var}}` |
-| `X-FENCE` | code fence count, language tags and bodies are unchanged |
+| `X-FENCE` | code fence count, language tags and bodies unchanged |
 | `X-HTML` | HTML tag multiset matches the source |
 | `X-LINK` | external URLs verbatim, internal link count preserved |
 | `X-HEADING` | heading level sequence matches element-wise |
 | `X-GLOSSARY` | required terms present, forbidden renderings absent |
 | `X-CHATTER` | no "here is the translation" preamble |
 
-These only warn: `X-DEADLINK` (a relative link that does not resolve), `X-ANCHOR` (a
-fragment with no matching heading), `X-UNTRANSLATED`, `X-ORPHAN`.
+Warnings only: `X-DEADLINK`, `X-ANCHOR`, `X-UNTRANSLATED`, `X-ORPHAN`.
 
-`X-INLINE` is the one that earns its keep. A translated `` `{count}` `` → `` `{数量}` ``
-passes every other check and breaks the command your reader copies.
-
-When a check fails, the offending chunk is sent back with the specific finding attached
-rather than the whole document being retried. After two failed repair rounds it stops and
-tells you which file needs a human, and why.
+On failure only the offending chunk is retried, with the finding attached. After two rounds
+it stops and names the file that needs a human.
 
 > [!NOTE]
-> **Anchors into another file are not rewritten.** Translating `## Getting Started` to
-> `## 快速开始` moves its anchor from `#getting-started` to `#快速开始`. Links *within* that
-> document are repointed automatically; a link from a different file
-> (`[x](./guide.md#getting-started)`) is not, and lands at the top of the page instead of the
-> section. `X-ANCHOR` warns when it can see the mismatch. Doing better needs a repo-wide
-> anchor map built after every file is translated, which is not implemented — it matters for
-> a docs site with heavy cross-linking and rarely for a README plus a few guides.
+> **Anchors from another file are not rewritten.** Translating `## Getting Started` moves its
+> anchor to `#快速开始`. Links within that document are repointed automatically; one from a
+> different file is not, and lands at the top of the page. `X-ANCHOR` warns. Fixing it needs
+> a repo-wide anchor map built after every file is translated — not implemented, and it
+> matters for a cross-linked docs site far more than for a README plus a few guides.
 
 ## Where state lives
 
@@ -103,65 +81,43 @@ tells you which file needs a human, and why.
 |---|---|---|
 | `.claude/i18n/state.json` | **yes** | translation lockfile: source hashes and the chunk cache |
 | `.claude/i18n/glossary.json` | **yes** | terminology, if you use one |
-| `.claude/i18n/work/` | no | per-run scratch |
-
-```gitignore
-.claude/i18n/work/
-```
+| `.claude/i18n/work/` | no | per-run scratch — gitignore it |
 
 > [!IMPORTANT]
-> A common `.gitignore` recipe denies `.claude/` wholesale and allowlists individual files.
-> In such a repo `state.json` is silently untracked, and the next fresh clone re-translates
-> everything from scratch. The skill runs `git check-ignore` before doing any work and warns
-> you. Either allowlist it:
->
-> ```gitignore
-> !.claude/i18n/
-> .claude/i18n/work/
-> ```
->
-> or tell the skill to keep state outside `.claude/`, in `.i18n/`.
+> The common `.gitignore` recipe denies `.claude/` wholesale. In such a repo `state.json` is
+> silently untracked and the next fresh clone re-translates everything. The skill runs
+> `git check-ignore` before doing any work and warns you. Either allowlist it —
+> `!.claude/i18n/` then `.claude/i18n/work/` — or tell the skill to keep state in `.i18n/`.
 
 ## How it works
 
-**Code blocks become `@@CODE_BLOCK_n@@` tokens before any model sees the text**, and are
-restored during reassembly. A subagent physically cannot corrupt a code block; it can only
-corrupt the token, and that is checked.
+**Code blocks become `@@CODE_BLOCK_n@@` tokens before any model sees the text** and are
+restored on reassembly, so a subagent cannot corrupt one — only the token, which is checked.
+The invariant is that **feeding every chunk back unchanged reproduces the source byte for
+byte**; the tests assert it on real documents, on fences nested in blockquotes and list
+items, and on a 4000-word paragraph. Reassembly refuses to write a damaged file when a token
+is dropped, mangled or duplicated, or when a chunk is missing or duplicated.
 
-The load-bearing invariant is that **feeding every chunk back unchanged reproduces the source
-byte for byte.** The test suite asserts it on real documents, on fences nested inside
-blockquotes and list items, and on a 4000-word single paragraph.
+Frontmatter is **edited, not re-serialised** — the original block is kept and scalar values
+substituted line by line, so comments, key order and quoting survive. Layout follows your
+repo's existing convention (`README.zh-CN.md`, `docs/zh-CN/`, `README_CN.md`, …) rather than
+imposing one, and relative links are rewritten to match.
 
-Reassembly refuses, rather than writing a damaged file, when a `@@CODE_BLOCK_n@@` token was
-dropped, mangled or duplicated, when a chunk is missing, or when a chunk id appears twice.
-Every one of those silently destroyed content in the implementation this replaced.
-
-Frontmatter is **edited, not re-serialised**: the original block is kept verbatim and scalar
-values are substituted line by line, so comments, key order and quoting style survive.
-Multi-line values are never touched. Nothing round-trips through a YAML dumper.
-
-Layout follows your repo's existing convention (`README.zh-CN.md`, `docs/zh-CN/`,
-`README_CN.md`, …) rather than imposing one, and relative links are rewritten to match.
-
-Documents are split on a character budget, preferring H1/H2 boundaries once a chunk has
-bulk, and each chunk is cached under the hash of its source text. Files whose source has not
-changed are skipped entirely. Within a file the cache is only as fine as the chunks: a
-document short enough to be a single chunk is retranslated whole when one word changes,
-while a long one reuses every section you did not touch.
+Documents split on a character budget, preferring H1/H2 boundaries, and each chunk is cached
+under the hash of its source. Unchanged files are skipped entirely; within a file the cache
+is only as fine as the chunks, so a single-chunk document is retranslated whole when one word
+changes while a long one reuses every section you did not touch.
 
 ## Development
 
 ```bash
-python3 -m unittest discover tests -v            # bare stdlib, nothing to install
-uv run --with markdown-it-py python -m unittest discover tests
+python3 -m unittest discover tests -v                              # bare stdlib
+uv run --with markdown-it-py --with pyyaml python -m unittest discover tests
 ```
 
-Run it both ways. On a bare `python3`, `_md` falls back to a regex Markdown scanner and the
-four tests that need container-nested fences skip themselves.
-
-Changing chunk boundaries means bumping `CHUNKER_VERSION` in `i18n/scripts/_job.py`. That
-invalidates every cached chunk translation, which is correct — cached text from an older
-splitter may never be produced again — and shows up as stale on the next run.
+Run it both ways: on a bare `python3` the four tests needing container-nested fences skip
+themselves. Changing chunk boundaries means bumping `CHUNKER_VERSION` in
+`i18n/scripts/_job.py`, which invalidates every cached chunk translation.
 
 ## License
 
