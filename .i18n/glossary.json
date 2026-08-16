@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "source_lang": "en",
+  "terms": [
+    {
+      "id": "claude-code",
+      "source": "Claude Code",
+      "policy": "do_not_translate",
+      "case_sensitive": true,
+      "severity": "error",
+      "notes": "Product name."
+    },
+    {
+      "id": "skill",
+      "source": "skill",
+      "aliases": ["skills", "Agent Skill"],
+      "policy": "translate",
+      "scope": ["**/*.md"],
+      "translations": {
+        "zh-CN": { "text": "技能", "forbid": ["技巧", "本领"] },
+        "ja": { "text": "スキル" }
+      },
+      "severity": "error",
+      "notes": "An Agent Skill, not a general ability."
+    },
+    {
+      "id": "subagent",
+      "source": "subagent",
+      "aliases": ["sub-agent"],
+      "policy": "translate",
+      "translations": {
+        "zh-CN": { "text": "子代理", "forbid": ["子智能体", "分代理"] }
+      },
+      "severity": "warn"
+    },
+    {
+      "id": "idempotent",
+      "source": "idempotent",
+      "policy": "first_use_gloss",
+      "translations": {
+        "zh-CN": { "text": "幂等", "keep_source": true }
+      },
+      "severity": "warn",
+      "notes": "Render the first occurrence as 幂等 (idempotent)."
+    },
+    {
+      "id": "repository",
+      "source": "repository",
+      "aliases": ["repo"],
+      "policy": "translate",
+      "translations": {
+        "zh-CN": { "text": "仓库", "forbid": ["存储库", "版本库"] }
+      },
+      "severity": "warn"
+    }
+  ]
+}
