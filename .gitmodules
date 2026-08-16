@@ -1,4 +1,0 @@
-[submodule "vendor/co-op-translator"]
-	path = vendor/co-op-translator
-	url = https://github.com/Azure/co-op-translator
-	shallow = true

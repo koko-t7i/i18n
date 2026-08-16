@@ -26,12 +26,12 @@ on structure damage, and a glossary with a `forbid` list pins terminology.
 ## Quick start
 
 ```bash
-git clone --recurse-submodules git@github.com:koko-t7i/i18n.git ~/icode/skills/i18n
+git clone git@github.com:koko-t7i/i18n.git ~/icode/skills/i18n
 ln -s ~/icode/skills/i18n/i18n ~/.claude/skills/i18n
 ```
 
-Requires [`uv`](https://docs.astral.sh/uv/) on `PATH`. Nothing is installed globally; the
-first run resolves dependencies into uv's cache (a large download once).
+One dependency: `markdown-it-py`. [`uv`](https://docs.astral.sh/uv/) on `PATH` supplies it
+per-run and installs nothing globally; a plain `python3` that already has it works too.
 
 Then just ask:
 
@@ -74,6 +74,7 @@ X-LINK         external URLs verbatim; internal link count
 X-HEADING      heading level sequence, element-wise
 X-GLOSSARY     required terms present, forbidden ones absent
 X-CHATTER      no "here is the translation" preamble
+X-DEADLINK     relative links resolve from the translated file    (warning)
 ```
 
 `X-INLINE` is the one that earns its keep. A translated `` `{count}` `` → `` `{数量}` `` passes
@@ -108,45 +109,63 @@ every other check and breaks the command your reader copies.
 | Command | Purpose |
 |---|---|
 | `plan` | scan, detect layout, diff against state, emit subagent tasks |
-| `apply` | reassemble results, repair CJK emphasis, rewrite links, write files |
+| `apply` | reassemble results, normalize anchors, rewrite links, write files |
 | `verify` | structural gate; exit 1 on any blocking finding |
 | `resource {plan,apply,verify}` | the key/value file path |
 
 Useful flags: `--detect-layout-only`, `--all` (ignore cache), `--force` (overwrite
 hand-edited translations), `--layout` / `--layout-pattern`, `--state-dir`,
-`--repair <verify.json>`, `--json`, `--strict`, `--run-review`.
+`--repair <verify.json>`, `--json`, `--strict`.
 
 ## How it works
 
-Markdown chunking, code-block protection and reassembly come from
+**Code blocks become `@@CODE_BLOCK_n@@` tokens before any model sees the text**, and are
+restored during reassembly. A subagent physically cannot corrupt a code block; it can only
+corrupt the token, and that is checked.
+
+The load-bearing invariant is that **feeding every chunk back unchanged reproduces the source
+byte for byte.** The test suite asserts it on real documents, on fences nested inside
+blockquotes and list items, and on a 4000-word single paragraph.
+
+Everything `finish` refuses, each of which silently destroyed content in the implementation
+this replaced:
+
+| Situation | Result |
+|---|---|
+| a `@@CODE_BLOCK_n@@` token was dropped, mangled, or duplicated | rejected, file not written |
+| a chunk is missing, or a chunk id appears twice | rejected |
+
+Frontmatter is **edited, not re-serialised**: the original block is kept verbatim and scalar
+values are substituted line by line, so comments, key order and quoting style survive.
+Multi-line values are never touched. Nothing round-trips through a YAML dumper.
+
+Layout follows your repo's existing convention (`README.zh-CN.md`, `docs/zh-CN/`,
+`README_CN.md`, …) rather than imposing one, and relative links are rewritten to match.
+
+<details>
+<summary>Previously built on Azure/co-op-translator</summary>
+
+Chunking and reassembly used to come from
 [Azure/co-op-translator](https://github.com/Azure/co-op-translator) (MIT), vendored as a
-submodule pinned at commit `f4f4b11` (v0.20.0). Its agent-assisted API is built for exactly
-this shape — the host agent supplies the translation, upstream handles the mechanics. Code
-blocks become `@@CODE_BLOCK_n@@` tokens *before any model sees the text*, so they cannot be
-corrupted.
+pinned submodule. It cost **182 transitive packages** — the whole Azure AI SDK, semantic-kernel,
+openai, numpy — plus a 20 MB font bundle only used for image translation, to call three
+functions. It also silently rewrote `**加粗**` to `<strong>加粗</strong>` for CJK targets,
+dropped code blocks without warning when a placeholder went missing, and destroyed
+frontmatter comments through `yaml.dump`.
 
-> **The PyPI release will not work.** 0.18.2 does not ship that API — its entry points are
-> only `translate`, `evaluate`, `migrate-links`. Hence the pinned submodule.
-
-This repo adds what upstream does not cover:
-
-- **Layout detection** — upstream always writes to `translations/<lang>/`. This follows your
-  repo's existing convention instead (`README.zh-CN.md`, `docs/zh-CN/`, `README_CN.md`, …)
-  and rewrites relative links to match.
-- **CJK emphasis repair** — upstream silently rewrites `**加粗**` to `<strong>加粗</strong>`
-  for CJK targets, with `warnings` coming back empty. Latin targets are unaffected. `apply`
-  converts it back, but only for tags the source document does not itself use.
-- **Incremental caching** — keyed on each chunk's source hash, so reuse survives re-chunking.
-- **Verification** — the checks above.
-- **Resource files** — key-set identity enforced *before* anything is written.
+The replacement was validated by running both implementations over the same corpus and
+diffing: code-block extraction matched exactly, and the only differences were the three
+upstream behaviours that were deliberately dropped.
+</details>
 
 ## Limitations
 
-- **Chunk granularity is upstream's.** It chunks by token budget, so a short document is one
-  chunk — editing a word in it re-translates the whole body. The cache pays off on long
-  documents and across many files, not on small edits to short ones.
-- **Translated headings change anchors.** `verify` warns when a document links to an anchor
-  that no longer exists in it, but cross-file anchors are not repaired automatically.
+- **Chunking is coarse for short documents.** A character budget with a preference for
+  H1/H2 boundaries means a short document is one chunk — editing a word in it re-translates
+  the whole body. The cache pays off on long documents and across many files.
+- **Cross-file anchors are not repaired.** Translated headings get new slugs; in-document
+  `[x](#frag)` links are repointed automatically, but a link from *another* file into a
+  translated heading is not, and `verify` only warns.
 - **mkdocs nav is not translated.** Edit it by hand.
 - **YAML needs `pyyaml`.** Without it the resource path refuses to run rather than
   hand-parsing — a wrong guess silently corrupts a config file.
@@ -157,17 +176,18 @@ This repo adds what upstream does not cover:
 python3 -m unittest discover tests -v     # standard library only, nothing to install
 ```
 
-Upgrading the vendored translator:
+Runs on a bare `python3` with nothing installed: `_md` falls back to a regex Markdown
+scanner and the four tests that need container-nested fences skip themselves. Run the suite
+both ways before committing:
 
 ```bash
-git -C vendor/co-op-translator fetch --depth 1 origin main
-git -C vendor/co-op-translator checkout <new-sha>
-git add vendor/co-op-translator && python3 -m unittest discover tests
+uv run --with markdown-it-py python -m unittest discover tests
 ```
 
-Re-run the end-to-end smoke test afterwards. The CJK repair and the chunk contract both
-depend on upstream behaviour that its own API guarantees do not cover.
+Changing chunk boundaries means bumping `CHUNKER_VERSION` in `i18n/scripts/_job.py`. That
+invalidates every cached chunk translation, which is correct — cached text from an older
+splitter may never be produced again — and shows up as `stale` on the next plan.
 
 ## License
 
-MIT. `vendor/co-op-translator` is MIT and retains its own `LICENSE`.
+MIT.

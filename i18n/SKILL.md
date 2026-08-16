@@ -21,9 +21,8 @@ Translation runs as a pipeline: a script plans the work and hands out chunks, **
 the actual translating**, and a script reassembles and verifies. You orchestrate; you do not
 translate whole documents yourself in the main thread.
 
-Chunking, code-block protection and reassembly come from a vendored copy of
-[co-op-translator](https://github.com/Azure/co-op-translator) (MIT, pinned commit). Layout,
-link rewriting, CJK repair, verification and resource files are this skill's own code.
+Everything is this skill's own code. The only third-party dependency is `markdown-it-py`,
+used for CommonMark-accurate fence detection; `run.sh` supplies it via `uv`.
 
 ## Hard rules
 
@@ -98,9 +97,8 @@ Each subagent gets exactly one task file. Its prompt must state:
 ## Installation
 
 ```bash
-git -C <repo> submodule update --init --depth 1     # fetches the vendored translator
 ln -s <repo>/i18n ~/.claude/skills/i18n
 ```
 
-`run.sh` invokes `uv` with `--python 3.12 --prerelease=allow`; both are required and are
-explained in `references/workflow.md`. The first run downloads a large dependency tree.
+`run.sh` runs the scripts through `uv run --with markdown-it-py`, falling back to a bare
+`python3` when the parser is already importable. Nothing is installed globally.

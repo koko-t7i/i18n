@@ -24,12 +24,12 @@
 ## 快速开始
 
 ```bash
-git clone --recurse-submodules git@github.com:koko-t7i/i18n.git ~/icode/skills/i18n
+git clone git@github.com:koko-t7i/i18n.git ~/icode/skills/i18n
 ln -s ~/icode/skills/i18n/i18n ~/.claude/skills/i18n
 ```
 
-需要 `PATH` 中有 [`uv`](https://docs.astral.sh/uv/)。不做任何全局安装；首次运行会把依赖
-解析进 uv 的缓存（仅第一次下载量较大）。
+只有一个依赖：`markdown-it-py`。`PATH` 中有 [`uv`](https://docs.astral.sh/uv/) 时它会按次提供该依赖、
+不做任何全局安装；已经装好该依赖的普通 `python3` 也可以直接用。
 
 然后直接提出需求：
 
@@ -72,6 +72,7 @@ X-LINK         external URLs verbatim; internal link count
 X-HEADING      heading level sequence, element-wise
 X-GLOSSARY     required terms present, forbidden ones absent
 X-CHATTER      no "here is the translation" preamble
+X-DEADLINK     relative links resolve from the translated file    (warning)
 ```
 
 `X-INLINE` 是最物有所值的一项。把 `` `{count}` `` 译成 `` `{数量}` `` 能通过其余所有检查，
@@ -106,42 +107,54 @@ X-CHATTER      no "here is the translation" preamble
 | 命令 | 用途 |
 |---|---|
 | `plan` | 扫描、检测布局、与状态比对、产出子代理任务 |
-| `apply` | 重组结果、修复 CJK 强调语法、重写链接、写入文件 |
+| `apply` | 重组结果、归一化锚点、重写链接、写入文件 |
 | `verify` | 结构门禁；出现任何阻断项即以 1 退出 |
 | `resource {plan,apply,verify}` | 键值文件的处理路径 |
 
 常用参数：`--detect-layout-only`、`--all`（忽略缓存）、`--force`（覆盖人工编辑过的译文）、
 `--layout` / `--layout-pattern`、`--state-dir`、
-`--repair <verify.json>`、`--json`、`--strict`、`--run-review`。
+`--repair <verify.json>`、`--json`、`--strict`。
 
 ## 工作原理
 
-Markdown 分块、代码块保护与重组来自
-[Azure/co-op-translator](https://github.com/Azure/co-op-translator)（MIT 许可），以 submodule
-形式引入并锁定在 commit `f4f4b11`（v0.20.0）。它的 agent-assisted API 正是为这种形态设计的
-—— 宿主 agent 提供译文，上游负责机械性工作。代码块**在任何模型看到文本之前**就已变成
-`@@CODE_BLOCK_n@@` 标记，因此不可能被破坏。
+**代码块在任何模型看到文本之前就已变成 `@@CODE_BLOCK_n@@` 标记**，并在重组时还原。
+子代理在物理上无法破坏代码块，它只能破坏那个标记，而这是会被检查的。
 
-> **PyPI 上的发布版无法使用。** 0.18.2 并未包含该 API —— 它的 entry points 只有
-> `translate`、`evaluate`、`migrate-links`。这正是锁定 submodule 的原因。
+最关键的不变式是：**把每个分块原样送回，必须逐字节复现原文。** 测试套件在真实文档、
+引用块与列表项内的嵌套围栏，以及一个 4000 词的单段落上都断言了这一点。
 
-本仓库补齐了上游未覆盖的部分：
+`finish` 会拒绝的全部情形——每一种在被替换掉的那套实现里都会静默损坏内容：
 
-- **布局检测** —— 上游一律写入 `translations/<lang>/`。本技能改为沿用你仓库既有的约定
-  （`README.zh-CN.md`、`docs/zh-CN/`、`README_CN.md` 等），并重写相对链接以保持一致。
-- **CJK 强调语法修复** —— 上游会在 CJK 目标语下静默地把 `**加粗**` 改写成 `<strong>加粗</strong>`，
-  且 `warnings` 返回为空。拉丁语系目标语不受影响。`apply` 会把它改回来，
-  但仅限于源文档自身未使用的标签。
-- **增量缓存** —— 以每个分块的源文哈希为键，因此重新分块后复用依然有效。
-- **校验** —— 即上文列出的各项检查。
-- **资源文件** —— 在写入**之前**强制校验键集一致。
+| 情形 | 结果 |
+|---|---|
+| `@@CODE_BLOCK_n@@` 标记被删除、篡改或重复 | 拒绝，文件不写入 |
+| 缺少某个分块，或某个分块 id 出现两次 | 拒绝 |
+
+frontmatter 是**就地编辑而非重新序列化**：原始块逐字保留，标量值按行替换，
+因此注释、键顺序与引号风格全部存活。多行值完全不动。不经过任何 YAML 序列化器往返。
+
+布局沿用你仓库既有的约定（`README.zh-CN.md`、`docs/zh-CN/`、`README_CN.md` 等）
+而非强加一种，并重写相对链接以保持一致。
+
+<details>
+<summary>曾经构建于 Azure/co-op-translator 之上</summary>
+
+分块与重组过去来自 [Azure/co-op-translator](https://github.com/Azure/co-op-translator)（MIT 许可），
+以锁定 commit 的 submodule 形式引入。为了调用三个函数，它的代价是 **182 个传递依赖包**——
+整套 Azure AI SDK、semantic-kernel、openai、numpy——外加一个 20 MB、仅用于图片翻译的字体包。
+它还会在 CJK 目标语下静默地把 `**加粗**` 改写成 `<strong>加粗</strong>`，
+在占位符丢失时不加警告地丢掉代码块，并通过 `yaml.dump` 摧毁 frontmatter 里的注释。
+
+替换方案的验证方式是：让两套实现跑同一批语料并逐项比对——代码块提取完全一致，
+且全部差异都只是那三项被刻意舍弃的上游行为。
+</details>
 
 ## 已知限制
 
-- **分块粒度由上游决定。** 它按 token 预算分块，因此一篇短文档就是一个分块——改动其中一个词
-  会重译整个正文。缓存的收益体现在长文档和多文件场景，而非短文档的小改动。
-- **标题翻译后锚点会变。** 当文档链接到自身已不存在的锚点时 `verify` 会告警，
-  但跨文件锚点不会被自动修复。
+- **短文档的分块粒度偏粗。** 采用字符预算并倾向于在 H1/H2 处切分，因此一篇短文档就是一个分块——
+  改动其中一个词会重译整个正文。缓存的收益体现在长文档和多文件场景。
+- **跨文件锚点不会被修复。** 标题翻译后会得到新的 slug；文档内部的 `[x](#frag)` 链接会被自动
+  重新指向，但**其他文件**指向某个已翻译标题的链接不会，`verify` 只会告警。
 - **mkdocs 的 nav 不做翻译。** 请手工编辑。
 - **YAML 需要 `pyyaml`。** 缺少它时资源路径会拒绝运行而不是去手工解析——
   猜错一次就会静默损坏一个配置文件。
@@ -152,17 +165,16 @@ Markdown 分块、代码块保护与重组来自
 python3 -m unittest discover tests -v     # standard library only, nothing to install
 ```
 
-升级 vendored 的翻译器：
+在一个什么都没装的裸 `python3` 上也能跑：`_md` 会回落到正则 Markdown 扫描器，
+四个需要容器内嵌套围栏的测试会自行跳过。提交前请用两种方式都跑一遍：
 
 ```bash
-git -C vendor/co-op-translator fetch --depth 1 origin main
-git -C vendor/co-op-translator checkout <new-sha>
-git add vendor/co-op-translator && python3 -m unittest discover tests
+uv run --with markdown-it-py python -m unittest discover tests
 ```
 
-之后请重跑端到端冒烟测试。CJK 修复与分块契约都依赖上游的具体行为，
-而这些行为并不在它自身的 API 保证范围内。
+改变分块边界意味着要提升 `i18n/scripts/_job.py` 里的 `CHUNKER_VERSION`。这会让所有已缓存的
+分块译文失效，而这是正确的——旧分块器产出的文本可能再也不会出现——并在下次 plan 时显示为 `stale`。
 
 ## 许可
 
-MIT。`vendor/co-op-translator` 为 MIT 许可并保留其自有的 `LICENSE`。
+MIT。

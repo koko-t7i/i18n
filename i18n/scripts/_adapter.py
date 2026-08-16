@@ -1,15 +1,11 @@
 """Adapter layer for the i18n skill.
 
-Everything in here is logic that co-op-translator does NOT provide:
+Repository-level policy, as opposed to the Markdown mechanics in ``_md`` and ``_job``:
 
-* layout detection / target-path resolution (upstream hardcodes ``translations/<lang>/``)
+* layout detection / target-path resolution
 * internal-link rewriting for the resolved layout
-* CJK bold/emphasis repair (upstream silently turns ``**x**`` into ``<strong>x</strong>``)
 * glossary matching and violation detection
 * the structural inventories the verifier compares between source and target
-
-Standard library only. This module is imported by the CLI scripts and by the tests;
-it must stay importable without co-op-translator present.
 """
 
 from __future__ import annotations
@@ -17,9 +13,13 @@ from __future__ import annotations
 import fnmatch
 import json
 import re
-import unicodedata
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import _md  # noqa: E402
 
 # --------------------------------------------------------------------------------------
 # language codes
@@ -56,35 +56,38 @@ def is_cjk(lang: str) -> bool:
 # code masking -- every text transform below must avoid touching code
 # --------------------------------------------------------------------------------------
 
-_FENCE_RE = re.compile(
-    r"^(?P<indent>[ ]{0,3})(?P<fence>```+|~~~+)(?P<info>[^\n]*)\n(?P<body>.*?)(?:^\1(?P=fence)[ \t]*$|\Z)",
-    re.DOTALL | re.MULTILINE,
-)
-_INLINE_CODE_RE = re.compile(r"(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)", re.DOTALL)
-_MASK = "\x00M{}\x00"
+#: Delegated to _md so every consumer -- the verifier's inventory, glossary matching, link
+#: rewriting -- gets CommonMark-accurate fence boundaries, including fences nested inside
+#: blockquotes and list items, which the old regex sliced incorrectly.
+mask_code = _md.mask_code
+unmask_code = _md.unmask_code
+slugify = _md.slugify
 
 
-def mask_code(text: str) -> tuple[str, list[str]]:
-    """Replace fenced and inline code with opaque sentinels.
+_QUOTE_PREFIX_RE = re.compile(r"^[ \t]*(?:>[ \t]?)+")
+_FENCE_OPEN_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})[ \t]*(?P<info>.*?)[ \t]*$")
 
-    Returns ``(masked_text, chunks)``; feed both back into :func:`unmask_code`.
-    The sentinels use NUL so they can never collide with real Markdown.
+
+def _fence_parts(text: str) -> list[tuple[str, str]]:
+    """``(info_string, body)`` per fenced block, in document order.
+
+    The info string is read after stripping any blockquote prefix, so a fence inside a
+    blockquote reports ``bash`` rather than ``> ```bash``. The body keeps its prefix, so a
+    translation that drops the surrounding blockquote still shows up as a difference.
     """
-    chunks: list[str] = []
-
-    def _take(m: re.Match) -> str:
-        chunks.append(m.group(0))
-        return _MASK.format(len(chunks) - 1)
-
-    masked = _FENCE_RE.sub(_take, text)
-    masked = _INLINE_CODE_RE.sub(_take, masked)
-    return masked, chunks
-
-
-def unmask_code(text: str, chunks: list[str]) -> str:
-    for i, c in enumerate(chunks):
-        text = text.replace(_MASK.format(i), c)
-    return text
+    out = []
+    for s, e in _md.fence_spans(text):
+        lines = text[s:e].split("\n")
+        if lines and lines[-1] == "":
+            lines.pop()
+        opener = _QUOTE_PREFIX_RE.sub("", lines[0]) if lines else ""
+        m = _FENCE_OPEN_RE.match(opener)
+        info = m.group("info") if m else ""
+        body_lines = lines[1:]
+        if body_lines and _FENCE_OPEN_RE.match(_QUOTE_PREFIX_RE.sub("", body_lines[-1])):
+            body_lines.pop()  # closing fence
+        out.append((info, "\n".join(body_lines)))
+    return out
 
 
 # --------------------------------------------------------------------------------------
@@ -306,34 +309,6 @@ def rewrite_links(content: str, src_rel: str, tgt_rel: str, layout: Layout, root
     return unmask_code(masked, chunks)
 
 
-# --------------------------------------------------------------------------------------
-# CJK emphasis repair
-# --------------------------------------------------------------------------------------
-
-_TAG_PAIRS = [("strong", "**"), ("b", "**"), ("em", "*"), ("i", "*")]
-
-
-def postfix_cjk_emphasis(source: str, translated: str, lang: str) -> tuple[str, list[str]]:
-    """Undo co-op-translator's ``**x**`` -> ``<strong>x</strong>`` rewrite for CJK targets.
-
-    Only converts a tag when the SOURCE document contains none of that tag, so a document
-    that legitimately hand-writes ``<strong>`` is left alone. Returns ``(text, notes)``.
-    """
-    if not is_cjk(lang):
-        return translated, []
-    src_masked, _ = mask_code(source)
-    out, chunks = mask_code(translated)
-    notes: list[str] = []
-    for tag, mark in _TAG_PAIRS:
-        if re.search(rf"<{tag}\b", src_masked, re.I):
-            notes.append(f"source already uses <{tag}>; left untouched")
-            continue
-        pat = re.compile(rf"<{tag}\b[^>]*>(.*?)</{tag}>", re.I | re.DOTALL)
-        n = len(pat.findall(out))
-        if n:
-            out = pat.sub(lambda m: f"{mark}{m.group(1).strip()}{mark}", out)
-            notes.append(f"converted {n} <{tag}> -> {mark}")
-    return unmask_code(out, chunks), notes
 
 
 # --------------------------------------------------------------------------------------
@@ -358,21 +333,11 @@ _CHATTER_RE = re.compile(
 )
 
 
-def slugify(text: str) -> str:
-    """GitHub-flavoured heading anchor slug."""
-    t = re.sub(r"[`*_~]", "", text).strip().lower()
-    t = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", t)
-    t = "".join(c for c in t if unicodedata.category(c)[0] not in "PS" or c in "-_ ")
-    return re.sub(r"\s+", "-", t).strip("-")
-
 
 def inventory(text: str) -> dict:
     """Structural fingerprint of a Markdown document, comparable between source and target."""
     masked, code_chunks = mask_code(text)
-    fences = [
-        (m.group("info").strip(), m.group("body"))
-        for m in _FENCE_RE.finditer(text)
-    ]
+    fences = _fence_parts(text)
     headings = _HEADING_RE.findall(masked)
     links, images = [], []
     for m in _LINK_RE.finditer(masked):
@@ -388,10 +353,8 @@ def inventory(text: str) -> dict:
         "fence_count": len(fences),
         # Inline code bodies are compared verbatim: a translator that renders `{count}` as
         # `{数量}`, or translates a flag name, is caught here and nowhere else.
-        "inline_code": sorted(
-            c for c in code_chunks if not c.lstrip().startswith(("```", "~~~"))
-        ),
-        "inline_code_count": sum(1 for c in code_chunks if not c.lstrip().startswith(("```", "~~~"))),
+        "inline_code": sorted(c for c in code_chunks if not _md.is_fence(c)),
+        "inline_code_count": sum(1 for c in code_chunks if not _md.is_fence(c)),
         "links": sorted(links),
         "images": sorted(images),
         "heading_levels": [len(h) for h, _ in headings],

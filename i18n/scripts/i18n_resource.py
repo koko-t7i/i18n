@@ -3,7 +3,7 @@
 
 Unlike Markdown, these need no chunking and no upstream help -- the unit is a key, the
 structural contract is "the key set never changes", and everything else is placeholder
-preservation. So this path is standard-library only and does not import co-op-translator.
+preservation. So this path needs no Markdown parsing at all.
 
     i18n_resource.py plan   --root . --lang zh-CN --file locales/en.json
     i18n_resource.py apply  --root . --run <id>

@@ -2,56 +2,75 @@
 
 Read this when a run behaves unexpectedly, or when you need to reason about caching.
 
-## Why the invocation looks like that
+## Dependencies
 
-`run.sh` always runs:
+`run.sh` prefers `uv`:
 
 ```bash
-uv run --python 3.12 --prerelease=allow --with <repo>/vendor/co-op-translator python <script>.py
+uv run --with markdown-it-py python <script>.py
 ```
 
-- `--python 3.12` — co-op-translator pins `>=3.10,<3.13`.
-- `--prerelease=allow` — its `semantic-kernel` dependency requires `azure-ai-agents>=1.2.0b3`,
-  a pre-release. Without this flag uv fails resolution outright.
-- `--with <local path>` — the PyPI release (0.18.2) **does not ship the agent-assisted API**;
-  its entry points are only `translate`, `evaluate`, `migrate-links`. The vendored submodule
-  is pinned at commit `f4f4b11` (v0.20.0), which does.
+and falls back to a bare `python3` when `markdown-it-py` is already importable.
+**`markdown-it-py` is the only third-party dependency** (it pulls just `mdurl`).
 
-We import `co_op_translator.mcp.server` and call its functions directly as a Python API. No
-MCP server is started; that module is just where upstream put these entry points.
+Everything still imports without it — `_md` falls back to a regex scanner and warns once —
+but that fallback mis-slices fences nested inside blockquotes (`> ```bash`) or list items.
+The unit tests skip the container-nesting cases when the parser is absent.
 
 ## The job / chunk model
 
-`start_markdown_agent_translation(document, language_code, source_path)` returns:
+`_job.start_job(document, lang, source_path)` returns:
 
 ```jsonc
-{"job_type": "markdown_agent_translation", "chunk_count": 2, "state": {...},
- "chunks": [{"id": "frontmatter:1", "kind": "frontmatter", "source": "**title**: Demo",
-             "prompt": "...", "instructions": "..."},
-            {"id": "body:1", "kind": "body",
-             "source": "# Demo\n\n@@CODE_BLOCK_0@@\n...", "prompt": "..."}]}
+{"job_type": "markdown_translation", "version": 1, "chunker": 1,
+ "language_code": "zh-CN", "language_name": "Chinese (Simplified)", "is_rtl": false,
+ "chunk_count": 2,
+ "chunks": [{"id": "frontmatter:1", "kind": "frontmatter", "source": "**title**: Demo", ...},
+            {"id": "body:1", "kind": "body", "source": "# Demo\n\n@@CODE_BLOCK_0@@\n...", ...}],
+ "state": {"original_document": "...", "placeholder_map": {...},
+           "frontmatter_raw": "---\ntitle: Demo\n---\n", "frontmatter_fields": {"title": "Demo"}}}
 ```
 
-Two things matter:
+Three things matter:
 
-- **Code is already gone from `source`.** Upstream replaces fenced code with
-  `@@CODE_BLOCK_n@@` before the text ever reaches a translator, and restores it during
-  reassembly. A subagent physically cannot corrupt a code block; it can only corrupt the
-  token, which `i18n_apply.py` checks for before writing anything.
-- **Frontmatter is split out and filtered.** Only translatable keys appear (`title`), rendered
-  as `**title**: Demo`. Keys like `sidebar_position` never reach the translator and are
-  reconstructed verbatim.
+- **Code is gone from `source` before any model sees it.** Fenced blocks are replaced by
+  `@@CODE_BLOCK_n@@` and restored during reassembly. A subagent physically cannot corrupt a
+  code block; it can only corrupt the token, and that is checked.
+- **Frontmatter is split out and filtered.** Only keys on the translatable allowlist appear,
+  rendered as `**title**: Demo`. Keys like `sidebar_position` never reach the translator.
+  Multi-line values (block scalars, nested maps, lists) are never translated.
+- **Frontmatter is edited, not re-serialised.** The original block is kept verbatim and
+  scalar values are substituted line by line, so comments, key order and quoting style all
+  survive. Nothing round-trips through a YAML dumper.
 
-`finish_markdown_agent_translation(job, translated_chunks)` needs **every** chunk of the
-document — you cannot reassemble half a file.
+`_job.finish_job(job, translated_chunks)` needs **every** chunk of the document — you cannot
+reassemble half a file.
+
+## What finish_job refuses
+
+All of these were silent data loss in the implementation this replaced. Each now raises,
+and `i18n_apply.py` turns it into an `ASM-*` rejection without writing the file:
+
+| Situation | Result |
+|---|---|
+| a `@@CODE_BLOCK_n@@` token was dropped | `ValueError`, names the lost tokens |
+| a token was mangled (`@@ CODE_BLOCK_0 @@`) | `ValueError` |
+| a token was duplicated | `ValueError` — the check is a multiset, not a set |
+| a chunk is missing | `ValueError`, names the chunk ids |
+| a chunk id appears twice | `ValueError` |
+| an extra chunk id was returned | accepted, reported in `warnings` |
+
+The invariant worth remembering: **feeding every chunk back unchanged must reproduce the
+source byte for byte.** The test suite asserts exactly that, including on documents with
+nested fences and a 4000-word single paragraph.
 
 ## Why the cache is keyed on chunk source hash
 
-Because `finish` needs all chunks, incrementality cannot live at the file level. So
+Because `finish_job` needs all chunks, incrementality cannot live at the file level. So
 `.claude/i18n/state.json` stores, per (file, language):
 
 ```jsonc
-{"target": "README.zh-CN.md", "source_sha": "...", "target_sha": "...",
+{"target": "README.zh-CN.md", "chunker": 1, "source_sha": "...", "target_sha": "...",
  "chunks": {"<sha256 of chunk source>": "<translated text>"}}
 ```
 
@@ -60,10 +79,14 @@ On re-plan, each chunk's source hash is looked up. Hits are copied into the job 
 chunk id means reuse survives re-chunking — a chunk that keeps its text but moves from
 `body:2` to `body:3` still hits.
 
-**Honest limitation:** upstream chunks by token budget, so a document under the budget is a
-single `body:1` chunk. Editing one word in such a file re-translates the whole body. The
-cache pays off on long documents and on repeated runs across many files, not on small edits
-to short files.
+`chunker` is the segmentation version. When `_job.CHUNKER_VERSION` changes, cached chunks
+were produced by a splitter that may never emit that text again, so the whole file is
+re-translated once. That is deliberate and visible in the plan output as `stale`.
+
+**Honest limitation:** chunking uses a character budget with a preference for breaking at
+H1/H2, so a document under the budget is a single `body:1` chunk. Editing one word in such a
+file re-translates the whole body. The cache pays off on long documents and on repeated runs
+across many files, not on small edits to short files.
 
 ## Staleness and human edits
 
@@ -73,7 +96,7 @@ to short files.
 |---|---|---|
 | `missing` | no translated file on disk | translate |
 | `ok` | source hash matches what we translated | skip (unless `--all`) |
-| `stale` | source changed since translation | translate, reusing unchanged chunks |
+| `stale` | source changed, or the chunker version did | translate, reusing unchanged chunks |
 | `edited` | translated file's hash differs from what we wrote | **conflict, skip** |
 | `orphan` | translation exists but we have no record of it | translate |
 
@@ -120,6 +143,6 @@ the failure is silent and only shows up as a full re-translation in a fresh clon
 |---|---|---|
 | `ASM-MISSING` | a chunk result file is absent or empty | re-dispatch those chunk tasks |
 | `ASM-PLACEHOLDER` | `@@CODE_BLOCK_n@@` tokens altered | re-dispatch with the rule restated |
-| `ASM-FINISH` | upstream reassembly raised | read the message; usually a malformed chunk |
+| `ASM-FINISH` | reassembly raised | read the message; usually a malformed chunk |
 
 A rejected file is **not written** — other files in the same run still are.

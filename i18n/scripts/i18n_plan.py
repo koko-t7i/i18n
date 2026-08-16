@@ -3,7 +3,7 @@
 
 Writes ``<state-dir>/work/<run_id>/`` containing:
 
-    jobs/<slug>.json      the co-op-translator job object, plus any cache-hit chunks
+    jobs/<slug>.json      the translation job, plus any cache-hit chunks
     tasks/<task_id>.json  one file per chunk that actually needs a subagent
     plan.json             the summary this script prints
 
@@ -24,25 +24,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import _adapter as A  # noqa: E402
+import _job  # noqa: E402
 from _paths import add_state_dir_arg, rel_state_dir, resolve_state_dir, warn_if_ignored  # noqa: E402
 from _state import State, sha  # noqa: E402
 
-
-def load_coop():
-    """Import co-op-translator's agent-assisted API, with an actionable error if absent."""
-    try:
-        from co_op_translator.mcp import server  # type: ignore
-        return server
-    except ImportError as exc:  # pragma: no cover - environment guard
-        sys.stderr.write(
-            "error: co-op-translator is not importable (%s).\n"
-            "Run this script through the wrapper, which supplies the vendored copy:\n"
-            "  uv run --python 3.12 --prerelease=allow \\\n"
-            "      --with <skill>/../vendor/co-op-translator python %s ...\n"
-            "Or ensure the submodule is checked out: git submodule update --init --depth 1\n"
-            % (exc, Path(__file__).name)
-        )
-        raise SystemExit(2)
 
 
 def slugify_path(rel: str, lang: str) -> str:
@@ -127,8 +112,6 @@ def main() -> int:
     (work / "tasks").mkdir(parents=True, exist_ok=True)
     (work / "results").mkdir(parents=True, exist_ok=True)
 
-    coop = load_coop()
-
     files_out, conflicts, tasks_written = [], [], 0
     skipped_by_cap = 0
 
@@ -137,7 +120,7 @@ def main() -> int:
         text = abs_src.read_text(encoding="utf-8")
         src_sha = sha(text)
         tgt_rel = A.resolve_target(rel, layout)
-        status = state.status(rel, args.lang, src_sha, root / tgt_rel)
+        status = state.status(rel, args.lang, src_sha, root / tgt_rel, _job.CHUNKER_VERSION)
 
         if status == "edited" and not args.force:
             conflicts.append({
@@ -149,10 +132,8 @@ def main() -> int:
             files_out.append({"file": rel, "target": tgt_rel, "status": "up-to-date", "tasks": 0})
             continue
 
-        job = coop.start_markdown_agent_translation(
-            document=text, language_code=args.lang, source_path=rel
-        )
-        cache = {} if (args.all or repair_files is not None) else dict(state.chunk_cache(rel, args.lang))
+        job = _job.start_job(text, args.lang, source_path=rel)
+        cache = {} if (args.all or repair_files is not None) else dict(state.chunk_cache(rel, args.lang, _job.CHUNKER_VERSION))
 
         slug = slugify_path(rel, args.lang)
         reused, todo = {}, []

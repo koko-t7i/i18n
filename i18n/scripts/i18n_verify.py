@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Verify translated documents against their sources. This is the blocking gate.
 
-Runs the structural assertions co-op-translator does not make, and optionally its own
-``run_review`` freshness/structure pass. Findings carry a severity; any ``error`` fails
-the run.
+Compares each translated document against its source. Findings carry a severity; any
+``error`` fails the run.
 
 Exit codes: 0 pass (warnings allowed) | 1 blocking findings | 2 error | 3 nothing to verify
 """
@@ -14,6 +13,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from urllib.parse import unquote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -31,7 +31,8 @@ def _split_links(urls: list[str]) -> tuple[list[str], int]:
     return ext, internal
 
 
-def verify_pair(src_text: str, tgt_text: str, lang: str, rel: str, terms: list) -> list[dict]:
+def verify_pair(src_text: str, tgt_text: str, lang: str, rel: str, terms: list,
+                target_abs: Path | None = None) -> list[dict]:
     s = A.inventory(src_text)
     t = A.inventory(tgt_text)
     f: list[dict] = []
@@ -42,7 +43,7 @@ def verify_pair(src_text: str, tgt_text: str, lang: str, rel: str, terms: list) 
     leaked = [p for p in t["coop_placeholders"] if p not in s["coop_placeholders"]]
     if leaked:
         add("X-PLACEHOLDER", "error",
-            "co-op placeholder tokens were left unresolved in the output",
+            "code placeholders were left unresolved in the output",
             expected=s["coop_placeholders"], actual=t["coop_placeholders"], leaked=leaked)
 
     if s["tokens"] != t["tokens"]:
@@ -52,8 +53,7 @@ def verify_pair(src_text: str, tgt_text: str, lang: str, rel: str, terms: list) 
     if s["html_tags"] != t["html_tags"]:
         add("X-HTML", "error", "HTML tags differ between source and translation",
             expected=s["html_tags"], actual=t["html_tags"],
-            hint="CJK targets: co-op-translator rewrites **bold** to <strong>; "
-                 "i18n_apply.py should have repaired this")
+            hint="the translation introduced or dropped HTML that the source does not have")
 
     if s["inline_code"] != t["inline_code"]:
         only_s = [c for c in s["inline_code"] if c not in t["inline_code"]]
@@ -99,8 +99,32 @@ def verify_pair(src_text: str, tgt_text: str, lang: str, rel: str, terms: list) 
         add("X-UNTRANSLATED", "warn",
             f"target looks untranslated (CJK ratio {A.cjk_ratio(tgt_text):.2f})")
 
+    if target_abs is not None:
+        for url in dead_local_links(tgt_text, target_abs):
+            add("X-DEADLINK", "warn", f"relative link {url!r} does not resolve from the translation")
+
     f.extend({**g, "file": rel} for g in A.check_glossary(src_text, tgt_text, terms, lang, rel))
     return f
+
+
+def dead_local_links(text: str, target_abs: Path) -> list[str]:
+    """Relative link targets that do not exist on disk, resolved from the translated file.
+
+    Borrowed from co-op-translator's review pass, which is the one idea there worth keeping:
+    link rewriting can point a translated document at a file that was never produced.
+    """
+    masked, _ = A.mask_code(text)
+    out = []
+    for m in A._LINK_RE.finditer(masked):
+        url = m.group(3)
+        if EXTERNAL.match(url) or url.startswith("#"):
+            continue
+        path = url.split("#", 1)[0].split("?", 1)[0]
+        if not path:
+            continue
+        if not (target_abs.parent / unquote(path)).exists():
+            out.append(url)
+    return out
 
 
 def main() -> int:
@@ -111,8 +135,6 @@ def main() -> int:
     ap.add_argument("--glossary", default=None)
     add_state_dir_arg(ap)
     ap.add_argument("--strict", action="store_true", help="treat warnings as blocking")
-    ap.add_argument("--run-review", action="store_true",
-                    help="also run co-op-translator's own deterministic review")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
 
@@ -150,21 +172,10 @@ def main() -> int:
             continue
         findings.extend(verify_pair(
             src.read_text(encoding="utf-8"), tgt.read_text(encoding="utf-8"),
-            args.lang, rel, terms,
+            args.lang, rel, terms, target_abs=tgt,
         ))
         checked += 1
 
-    review = None
-    if args.run_review:
-        try:
-            from i18n_plan import load_coop
-            coop = load_coop()
-            review = coop.run_review(language_codes=args.lang, root_dir=str(root),
-                                     markdown=True, notebook=False)
-        except SystemExit:
-            review = {"ok": None, "error": "co-op-translator unavailable"}
-        except Exception as exc:  # pragma: no cover
-            review = {"ok": None, "error": str(exc)}
 
     n_err = sum(1 for f in findings if f["severity"] == "error")
     n_warn = sum(1 for f in findings if f["severity"] == "warn")
@@ -177,7 +188,6 @@ def main() -> int:
         "counts": {"error": n_err, "warn": n_warn},
         "findings": findings,
         "retry_files": sorted({f["file"] for f in findings if f["severity"] == "error"}),
-        "coop_review": review,
     }
 
     if args.json:
@@ -189,11 +199,6 @@ def main() -> int:
             if "expected" in f:
                 extra = f"\n        expected={f['expected']!r}\n        actual  ={f['actual']!r}"
             print(f"  {f['severity'].upper():5s} {f['code']:16s} {f['file']}: {f['message']}{extra}")
-        if review is not None:
-            print(f"  co-op review ok={review.get('ok')}")
-            if review.get("stdout"):
-                for line in str(review["stdout"]).strip().splitlines():
-                    print(f"      {line}")
     return 1 if blocking else 0
 
 

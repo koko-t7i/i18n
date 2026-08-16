@@ -1,7 +1,7 @@
 # Resource files (JSON / YAML / .properties / PO)
 
-A separate path from Markdown. No chunking, no co-op-translator — the unit is a key, and the
-structural contract is that the key set never changes.
+A separate path from Markdown. No chunking and no Markdown parsing — the unit is a key, and
+the structural contract is that the key set never changes.
 
 ```bash
 S=~/.claude/skills/i18n/scripts

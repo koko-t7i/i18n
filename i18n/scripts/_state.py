@@ -1,8 +1,8 @@
 """Incremental translation state.
 
-co-op-translator's ``finish_markdown_agent_translation`` needs *every* chunk of a document
-to reassemble it, so incrementality cannot live at the document level -- it has to live at
-the chunk level. This module caches ``sha256(chunk.source) -> translated_text`` per
+``_job.finish_job`` needs *every* chunk of a document to reassemble it, so incrementality
+cannot live at the document level -- it has to live at the chunk level. This module caches
+``sha256(chunk.source) -> translated_text`` per
 (file, language). On a re-run, any chunk whose source text is unchanged is served from the
 cache and never reaches a subagent; only cache misses become tasks.
 
@@ -66,8 +66,17 @@ class State:
     def entry(self, rel: str, lang: str) -> dict:
         return self.data.setdefault("files", {}).setdefault(rel, {}).get(lang, {})
 
-    def chunk_cache(self, rel: str, lang: str) -> dict[str, str]:
-        return self.entry(rel, lang).get("chunks", {})
+    def chunk_cache(self, rel: str, lang: str, chunker: int | None = None) -> dict[str, str]:
+        """Cached chunk translations, empty when they came from a different chunker.
+
+        Chunk boundaries are part of the cache key by implication: text cached under an
+        older splitter may never be produced again, so keeping it would silently mix
+        translations from two different segmentations.
+        """
+        e = self.entry(rel, lang)
+        if chunker is not None and e.get("chunker") != chunker:
+            return {}
+        return e.get("chunks", {})
 
     def record(
         self,
@@ -77,9 +86,11 @@ class State:
         source_sha: str,
         target_text: str,
         chunks: dict[str, str],
+        chunker: int | None = None,
     ) -> None:
         self.data.setdefault("files", {}).setdefault(rel, {})[lang] = {
             "target": target_rel,
+            "chunker": chunker,
             "source_sha": source_sha,
             "target_sha": sha(target_text),
             "translated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -87,11 +98,14 @@ class State:
         }
 
     # ---------------------------------------------------------------- staleness
-    def status(self, rel: str, lang: str, source_sha: str, target_abs: Path) -> str:
+    def status(self, rel: str, lang: str, source_sha: str, target_abs: Path,
+               chunker: int | None = None) -> str:
         """One of ``missing`` | ``ok`` | ``stale`` | ``edited`` | ``orphan``.
 
         ``edited`` means a human changed the translated file after we wrote it; the caller
-        must not overwrite it without an explicit ``--force``.
+        must not overwrite it without an explicit ``--force``. A chunker change also reads
+        as ``stale`` -- the translation is still valid text, but it can no longer be
+        extended incrementally, so it has to be redone once.
         """
         e = self.entry(rel, lang)
         if not target_abs.exists():
@@ -100,4 +114,6 @@ class State:
             return "orphan"
         if e.get("target_sha") and file_sha(target_abs) != e["target_sha"]:
             return "edited"
+        if chunker is not None and e.get("chunker") != chunker:
+            return "stale"
         return "ok" if e.get("source_sha") == source_sha else "stale"
