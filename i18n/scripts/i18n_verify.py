@@ -18,6 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import _adapter as A  # noqa: E402
+from _paths import add_state_dir_arg, resolve_state_dir  # noqa: E402
 from _state import State, file_sha  # noqa: E402
 
 EXTERNAL = A._EXTERNAL_RE
@@ -108,6 +109,7 @@ def main() -> int:
     ap.add_argument("--lang", required=True)
     ap.add_argument("--files", nargs="*", default=None, help="limit to these source paths")
     ap.add_argument("--glossary", default=None)
+    add_state_dir_arg(ap)
     ap.add_argument("--strict", action="store_true", help="treat warnings as blocking")
     ap.add_argument("--run-review", action="store_true",
                     help="also run co-op-translator's own deterministic review")
@@ -115,8 +117,9 @@ def main() -> int:
     args = ap.parse_args()
 
     root = Path(args.root).resolve()
-    state = State.load(root)
-    gpath = Path(args.glossary) if args.glossary else root / ".i18n" / "glossary.json"
+    state_dir = resolve_state_dir(root, args.state_dir)
+    state = State.load(root, state_dir)
+    gpath = Path(args.glossary) if args.glossary else state_dir / "glossary.json"
     terms = A.load_glossary(gpath)
 
     pairs = []

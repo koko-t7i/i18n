@@ -24,6 +24,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import _adapter as A  # noqa: E402
+from _paths import add_state_dir_arg, rel_state_dir, resolve_state_dir, warn_if_ignored  # noqa: E402
 from _state import State, sha  # noqa: E402
 
 BATCH_KEYS = 60
@@ -192,13 +193,15 @@ def cmd_plan(args) -> int:
     layout = A.detect_layout(root, args.lang)
     tgt_rel = args.target or A.resolve_target(args.file, layout)
 
-    state = State.load(root)
+    state_dir = resolve_state_dir(root, args.state_dir)
+    warn_if_ignored(root, state_dir)
+    state = State.load(root, state_dir)
     cache = state.chunk_cache(args.file, args.lang) if not args.all else {}
-    terms = A.load_glossary(root / ".i18n" / "glossary.json")
+    terms = A.load_glossary(state_dir / "glossary.json")
 
     todo = {k: v for k, v in pairs.items() if sha(v) not in cache}
     run_id = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
-    work = root / ".i18n" / "work" / run_id
+    work = state_dir / "work" / run_id
     (work / "tasks").mkdir(parents=True, exist_ok=True)
     (work / "results").mkdir(parents=True, exist_ok=True)
 
@@ -221,13 +224,13 @@ def cmd_plan(args) -> int:
                 "- Translate only human-readable text."
                 + A.glossary_prompt(hits, args.lang)
             ),
-            "result_path": f".i18n/work/{run_id}/results/{task_id}.json",
+            "result_path": f"{rel_state_dir(root, state_dir)}/work/{run_id}/results/{task_id}.json",
         }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     plan = {"run_id": run_id, "kind": "resource", "file": args.file, "target": tgt_rel,
             "lang": args.lang, "format": fmt, "total_keys": len(pairs),
             "reused": len(pairs) - len(todo), "task_count": len(batches),
-            "work_dir": f".i18n/work/{run_id}"}
+            "work_dir": f"{rel_state_dir(root, state_dir)}/work/{run_id}"}
     (work / "plan.json").write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n",
                                     encoding="utf-8")
     print(json.dumps(plan, ensure_ascii=False, indent=2) if args.json else
@@ -238,12 +241,13 @@ def cmd_plan(args) -> int:
 
 def cmd_apply(args) -> int:
     root = Path(args.root).resolve()
-    work = root / ".i18n" / "work" / args.run
+    state_dir = resolve_state_dir(root, args.state_dir)
+    work = state_dir / "work" / args.run
     plan = json.loads((work / "plan.json").read_text(encoding="utf-8"))
     src_path = root / plan["file"]
     structure, pairs, fmt = read_resource(src_path)
 
-    state = State.load(root)
+    state = State.load(root, state_dir)
     cache = dict(state.chunk_cache(plan["file"], plan["lang"]))
     values = {k: cache[sha(v)] for k, v in pairs.items() if sha(v) in cache}
 
@@ -307,6 +311,7 @@ def main() -> int:
         p = sub.add_parser(name)
         p.add_argument("--root", default=".")
         p.add_argument("--json", action="store_true")
+        add_state_dir_arg(p)
         if name == "apply":
             p.add_argument("--run", required=True)
             p.add_argument("--force", action="store_true")

@@ -19,7 +19,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 SCHEMA = 1
-STATE_REL = ".i18n/state.json"
 
 
 def sha(text: str) -> str:
@@ -36,22 +35,24 @@ def file_sha(path: Path) -> str:
 class State:
     root: Path
     data: dict
+    state_dir: Path
 
     # ---------------------------------------------------------------- construction
     @classmethod
-    def load(cls, root: Path) -> "State":
-        p = Path(root) / STATE_REL
+    def load(cls, root: Path, state_dir: Path) -> "State":
+        root, state_dir = Path(root), Path(state_dir)
+        p = state_dir / "state.json"
         if p.exists():
             try:
                 data = json.loads(p.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
                 data = {}
             if data.get("schema") == SCHEMA:
-                return cls(Path(root), data)
-        return cls(Path(root), {"schema": SCHEMA, "files": {}})
+                return cls(root, data, state_dir)
+        return cls(root, {"schema": SCHEMA, "files": {}}, state_dir)
 
     def save(self) -> Path:
-        p = self.root / STATE_REL
+        p = self.state_dir / "state.json"
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_suffix(".json.tmp")
         tmp.write_text(

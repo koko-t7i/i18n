@@ -71,5 +71,5 @@ that no longer exists in it, but it cannot repair cross-file anchors automatical
 
 Translation artifacts are never treated as sources, so a second run does not translate
 `README.zh-CN.md` into `README.zh-CN.zh-CN.md`. Also skipped:
-`.git`, `.i18n`, `node_modules`, `__pycache__`, `.venv`, `venv`, `vendor`, `.worktrees`,
+`.git`, `.claude`, `.i18n`, `node_modules`, `__pycache__`, `.venv`, `venv`, `vendor`, `.worktrees`,
 `dist`, `build`, `.cache`.

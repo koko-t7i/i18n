@@ -15,7 +15,7 @@
       "source": "skill",
       "aliases": ["skills", "Agent Skill"],
       "policy": "translate",
-      "scope": ["**/*.md"],
+      "scope": ["*.md", "**/*.md"],
       "translations": {
         "zh-CN": { "text": "技能", "forbid": ["技巧", "本领"] },
         "ja": { "text": "スキル" }

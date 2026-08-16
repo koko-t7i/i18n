@@ -2,7 +2,7 @@
 
 Optional. Without one, translation still works; terminology just drifts between runs.
 
-Lives at `<repo>/.i18n/glossary.json` and **should be committed**. Seed it by copying
+Lives at `<repo>/.claude/i18n/glossary.json` and **should be committed**. Seed it by copying
 `assets/glossary.example.json`.
 
 ## Schema
@@ -84,5 +84,10 @@ Reported by `verify` as `X-GLOSSARY`:
 - `do_not_translate` term missing from the target → `severity` from the term
 - a `forbid` rendering present → always `warn`
 
+A document that *discusses* terminology will trip its own glossary — a translation guide
+that writes "use 技能, never 技巧" contains 技巧 and gets a `GL-ALT` warning. That is why
+`forbid` findings are always `warn` and never block. Leave them; do not contort the prose to
+silence them.
+
 Changing the glossary does not by itself mark documents stale. To propagate a new or changed
-term, re-run the affected files with `--all`, or delete their entries from `.i18n/state.json`.
+term, re-run the affected files with `--all`, or delete their entries from `.claude/i18n/state.json`.

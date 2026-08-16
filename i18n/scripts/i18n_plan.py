@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Plan a translation run: scan, detect layout, diff against state, emit subagent tasks.
 
-Writes ``.i18n/work/<run_id>/`` containing:
+Writes ``<state-dir>/work/<run_id>/`` containing:
 
     jobs/<slug>.json      the co-op-translator job object, plus any cache-hit chunks
     tasks/<task_id>.json  one file per chunk that actually needs a subagent
@@ -24,6 +24,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import _adapter as A  # noqa: E402
+from _paths import add_state_dir_arg, rel_state_dir, resolve_state_dir, warn_if_ignored  # noqa: E402
 from _state import State, sha  # noqa: E402
 
 
@@ -59,7 +60,8 @@ def main() -> int:
     ap.add_argument("--detect-layout-only", action="store_true")
     ap.add_argument("--all", action="store_true", help="ignore the cache; re-translate everything")
     ap.add_argument("--force", action="store_true", help="overwrite human-edited translations")
-    ap.add_argument("--glossary", default=None, help="path to glossary.json (default .i18n/glossary.json)")
+    ap.add_argument("--glossary", default=None, help="path to glossary.json (default <state-dir>/glossary.json)")
+    add_state_dir_arg(ap)
     ap.add_argument("--max-tasks", type=int, default=40)
     ap.add_argument("--repair", default=None, help="verify.json whose failures should be re-planned")
     ap.add_argument("--json", action="store_true", help="emit plan.json on stdout")
@@ -113,12 +115,14 @@ def main() -> int:
             continue
         sources.append(rel)
 
-    state = State.load(root)
-    glossary_path = Path(args.glossary) if args.glossary else root / ".i18n" / "glossary.json"
+    state_dir = resolve_state_dir(root, args.state_dir)
+    warn_if_ignored(root, state_dir)
+    state = State.load(root, state_dir)
+    glossary_path = Path(args.glossary) if args.glossary else state_dir / "glossary.json"
     terms = A.load_glossary(glossary_path)
 
     run_id = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
-    work = root / ".i18n" / "work" / run_id
+    work = state_dir / "work" / run_id
     (work / "jobs").mkdir(parents=True, exist_ok=True)
     (work / "tasks").mkdir(parents=True, exist_ok=True)
     (work / "results").mkdir(parents=True, exist_ok=True)
@@ -177,7 +181,7 @@ def main() -> int:
                 "source": ch["source"],
                 "prompt": ch["prompt"] + A.glossary_prompt(hits, args.lang),
                 "instructions": ch.get("instructions", ""),
-                "result_path": f".i18n/work/{run_id}/results/{task_id}.json",
+                "result_path": f"{rel_state_dir(root, state_dir)}/work/{run_id}/results/{task_id}.json",
             }
             (work / "tasks" / f"{task_id}.json").write_text(
                 json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
@@ -208,7 +212,7 @@ def main() -> int:
         "layout": layout.to_dict(),
         "glossary": str(glossary_path) if terms else None,
         "glossary_terms": len(terms),
-        "work_dir": f".i18n/work/{run_id}",
+        "work_dir": f"{rel_state_dir(root, state_dir)}/work/{run_id}",
         "files": files_out,
         "task_count": tasks_written,
         "conflicts": conflicts,

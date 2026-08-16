@@ -20,6 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import _adapter as A  # noqa: E402
+from _paths import add_state_dir_arg, resolve_state_dir  # noqa: E402
 from _state import State, sha  # noqa: E402
 from i18n_plan import load_coop  # noqa: E402
 
@@ -70,11 +71,13 @@ def main() -> int:
     ap.add_argument("--root", default=".")
     ap.add_argument("--run", required=True, help="run id from i18n_plan.py")
     ap.add_argument("--dry-run", action="store_true")
+    add_state_dir_arg(ap)
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
 
     root = Path(args.root).resolve()
-    work = root / ".i18n" / "work" / args.run
+    state_dir = resolve_state_dir(root, args.state_dir)
+    work = state_dir / "work" / args.run
     if not work.is_dir():
         sys.stderr.write(f"error: no such run: {work}\n")
         return 2
@@ -84,7 +87,7 @@ def main() -> int:
     layout = A.Layout(**{k: v for k, v in plan["layout"].items() if k != "confidence"},
                       confidence=plan["layout"]["confidence"])
     coop = load_coop()
-    state = State.load(root)
+    state = State.load(root, state_dir)
 
     written, rejected = [], []
 

@@ -2,5 +2,5 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
-.i18n/work/
+.claude/i18n/work/
 .DS_Store

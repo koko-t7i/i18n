@@ -42,7 +42,7 @@ link rewriting, CJK repair, verification and resource files are this skill's own
 ```bash
 S=~/.claude/skills/i18n/scripts          # or the repo path
 $S/run.sh plan  --root . --lang zh-CN --paths 'README.md' 'docs/**/*.md'
-# ... fan out one Task subagent per file in .i18n/work/<run>/tasks/ ...
+# ... fan out one Task subagent per file in .claude/i18n/work/<run>/tasks/ ...
 $S/run.sh apply  --root . --run <run_id>
 $S/run.sh verify --root . --lang zh-CN
 ```
@@ -53,23 +53,23 @@ $S/run.sh verify --root . --lang zh-CN
 2. **Detect layout** — `run.sh plan --detect-layout-only --root . --lang zh-CN`. If
    `confidence < 0.8`, read `references/layout.md`, show the user the two candidate layouts,
    and pass `--layout` / `--layout-pattern`.
-3. **Glossary** *(optional)* — if `.i18n/glossary.json` is absent, offer to seed it from
+3. **Glossary** *(optional)* — if `.claude/i18n/glossary.json` is absent, offer to seed it from
    `assets/glossary.example.json`. Running without one is fine.
 4. **Plan** — `run.sh plan --root . --lang <lang> [--paths ...] --json`. Read the summary.
    - `conflicts` non-empty → surface each to the user and stop until they decide.
    - `task_count == 0` → everything is current; say so and stop.
    - `truncated_tasks > 0` → say so; a second run is needed after this batch.
 5. **Read the reference the plan points at** — normally none. Only when routing says so.
-6. **Fan out** — one `Task` subagent per file in `.i18n/work/<run>/tasks/`, about 6 per
+6. **Fan out** — one `Task` subagent per file in `.claude/i18n/work/<run>/tasks/`, about 6 per
    message. See the subagent contract below.
 7. **Apply** — `run.sh apply --root . --run <run_id>`. Rejected files are listed with a
    code; re-dispatch just those tasks.
 8. **Verify** — `run.sh verify --root . --lang <lang> --json`.
 9. **Repair on failure** — read `references/verification.md`, then
-   `run.sh plan --repair .i18n/work/<run>/verify.json` and return to step 6.
+   `run.sh plan --repair .claude/i18n/work/<run>/verify.json` and return to step 6.
    **Retry budget: 2.** After that, report exactly which files need a human and why.
 10. **Report** — files written, chunks fresh vs reused, verify verdict. Do not commit unless
-    asked; if committing, stage the translated files and `.i18n/state.json` together.
+    asked; if committing, stage the translated files and `.claude/i18n/state.json` together.
 
 ## Routing
 

@@ -48,7 +48,7 @@ document — you cannot reassemble half a file.
 ## Why the cache is keyed on chunk source hash
 
 Because `finish` needs all chunks, incrementality cannot live at the file level. So
-`.i18n/state.json` stores, per (file, language):
+`.claude/i18n/state.json` stores, per (file, language):
 
 ```jsonc
 {"target": "README.zh-CN.md", "source_sha": "...", "target_sha": "...",
@@ -80,12 +80,39 @@ to short files.
 `edited` is the important one: it means a human touched the translation. Never pass `--force`
 without asking. Report the file, say the translation was hand-edited, and let the user choose.
 
-## Work directory
+## State directory
 
-`.i18n/work/<run_id>/` holds `plan.json`, `jobs/*.json`, `tasks/*.json`, `results/*.json`.
-It is disposable and should be gitignored. `.i18n/state.json` and `.i18n/glossary.json` are
-the durable files and **should** be committed — state is the translation lockfile, and a
-translated file without its state entry looks `orphan` on the next run.
+Everything lives under `.claude/i18n/`, overridable with `--state-dir`:
+
+| Path | Committed? | Purpose |
+|---|---|---|
+| `.claude/i18n/state.json` | **yes** | translation lockfile: source hashes + chunk cache |
+| `.claude/i18n/glossary.json` | **yes** | terminology, if used |
+| `.claude/i18n/work/<run_id>/` | no | `plan.json`, `jobs/`, `tasks/`, `results/` — disposable |
+
+A translated file whose state entry is missing looks `orphan` on the next run and gets
+re-translated from scratch, so `state.json` genuinely has to be committed.
+
+**This is the one thing that bites.** The common community `.gitignore` recipe denies
+`.claude/` wholesale and allowlists individual files:
+
+```gitignore
+.claude/
+!.claude/settings.json
+.claude/settings.local.json
+```
+
+In a repo like that, `state.json` is silently untracked. `plan` therefore runs
+`git check-ignore` on it and prints a warning naming the fix. If you see that warning, either
+allowlist the directory:
+
+```gitignore
+!.claude/i18n/
+.claude/i18n/work/
+```
+
+or move state out of `.claude/` entirely with `--state-dir .i18n`. Do not ignore the warning —
+the failure is silent and only shows up as a full re-translation in a fresh clone.
 
 ## Failure codes from `apply`
 

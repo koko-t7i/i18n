@@ -47,8 +47,8 @@ document already contained that tag, and a human should look at it.
 ## Repair loop
 
 ```bash
-run.sh verify --root . --lang zh-CN --json > .i18n/work/<run>/verify.json
-run.sh plan   --root . --lang zh-CN --repair .i18n/work/<run>/verify.json
+run.sh verify --root . --lang zh-CN --json > .claude/i18n/work/<run>/verify.json
+run.sh plan   --root . --lang zh-CN --repair .claude/i18n/work/<run>/verify.json
 # fan out the new tasks, then apply and verify again
 ```
 
