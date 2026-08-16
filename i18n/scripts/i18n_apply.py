@@ -1,0 +1,170 @@
+#!/usr/bin/env python3
+"""Assemble subagent results into translated files.
+
+For each planned job: merge cache-hit chunks with fresh subagent results, assert the
+co-op-translator placeholders survived, reassemble via ``finish_markdown_agent_translation``,
+repair CJK emphasis, rewrite relative links for the target location, and write the file.
+
+This is the only script that writes into the repository.
+
+Exit codes: 0 all files written | 1 one or more files rejected | 2 error
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import _adapter as A  # noqa: E402
+from _state import State, sha  # noqa: E402
+from i18n_plan import load_coop  # noqa: E402
+
+
+def collect_chunks(job_blob: dict, results_dir: Path) -> tuple[dict[str, str], list[str]]:
+    """Return ``({chunk_id: text}, missing_ids)`` merging reuse cache and subagent results."""
+    out = dict(job_blob.get("reused_chunks", {}))
+    missing = []
+    for ch in job_blob["job"].get("chunks", []):
+        cid = ch["id"]
+        if cid in out:
+            continue
+        slug = job_blob["slug"]
+        path = results_dir / f"{slug}.{cid.replace(':', '-')}.json"
+        if not path.exists():
+            missing.append(cid)
+            continue
+        data = json.loads(path.read_text(encoding="utf-8"))
+        text = data.get("translated_text")
+        if not isinstance(text, str) or not text.strip():
+            missing.append(cid)
+            continue
+        out[cid] = text
+    return out, missing
+
+
+def check_placeholders(job_blob: dict, chunks: dict[str, str]) -> list[dict]:
+    """Every ``@@CODE_BLOCK_n@@``-style token in a chunk's source must survive translation."""
+    problems = []
+    for ch in job_blob["job"].get("chunks", []):
+        cid = ch["id"]
+        if cid not in chunks:
+            continue
+        want = sorted(A.COOP_PLACEHOLDER_RE.findall(ch["source"]))
+        got = sorted(A.COOP_PLACEHOLDER_RE.findall(chunks[cid]))
+        if want != got:
+            problems.append({
+                "chunk_id": cid,
+                "expected": want,
+                "actual": got,
+                "message": "co-op placeholder tokens were altered; the chunk must be retranslated",
+            })
+    return problems
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Apply translated chunks to the repository.")
+    ap.add_argument("--root", default=".")
+    ap.add_argument("--run", required=True, help="run id from i18n_plan.py")
+    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--json", action="store_true")
+    args = ap.parse_args()
+
+    root = Path(args.root).resolve()
+    work = root / ".i18n" / "work" / args.run
+    if not work.is_dir():
+        sys.stderr.write(f"error: no such run: {work}\n")
+        return 2
+
+    plan = json.loads((work / "plan.json").read_text(encoding="utf-8"))
+    lang = plan["lang"]
+    layout = A.Layout(**{k: v for k, v in plan["layout"].items() if k != "confidence"},
+                      confidence=plan["layout"]["confidence"])
+    coop = load_coop()
+    state = State.load(root)
+
+    written, rejected = [], []
+
+    for job_file in sorted((work / "jobs").glob("*.json")):
+        blob = json.loads(job_file.read_text(encoding="utf-8"))
+        rel, tgt_rel = blob["file"], blob["target"]
+
+        chunks, missing = collect_chunks(blob, work / "results")
+        if missing:
+            rejected.append({
+                "file": rel, "code": "ASM-MISSING",
+                "chunk_ids": missing,
+                "message": f"{len(missing)} chunk result(s) missing or empty",
+            })
+            continue
+
+        problems = check_placeholders(blob, chunks)
+        if problems:
+            rejected.append({
+                "file": rel, "code": "ASM-PLACEHOLDER",
+                "chunks": problems,
+                "message": "placeholder tokens were altered by the translator",
+            })
+            continue
+
+        try:
+            result = coop.finish_markdown_agent_translation(
+                job=blob["job"],
+                translated_chunks=[{"chunk_id": c, "translated_text": t} for c, t in chunks.items()],
+            )
+        except Exception as exc:  # pragma: no cover - upstream guard
+            rejected.append({"file": rel, "code": "ASM-FINISH", "message": str(exc)})
+            continue
+
+        content = result["content"]
+        source_text = (root / rel).read_text(encoding="utf-8")
+
+        content, notes = A.postfix_cjk_emphasis(source_text, content, lang)
+        content = A.rewrite_links(content, rel, tgt_rel, layout, root)
+
+        rec = {
+            "file": rel, "target": tgt_rel,
+            "reused": len(blob.get("reused_chunks", {})),
+            "fresh": len(chunks) - len(blob.get("reused_chunks", {})),
+            "postfix": notes,
+            "upstream_warnings": result.get("warnings") or [],
+        }
+
+        if not args.dry_run:
+            out_path = root / tgt_rel
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(content, encoding="utf-8")
+            cache = {sha(ch["source"]): chunks[ch["id"]] for ch in blob["job"]["chunks"]}
+            state.record(rel, lang, tgt_rel, blob["source_sha"], content, cache)
+        written.append(rec)
+
+    if not args.dry_run and written:
+        state.save()
+
+    out = {
+        "run_id": args.run,
+        "lang": lang,
+        "dry_run": args.dry_run,
+        "written": written,
+        "rejected": rejected,
+    }
+    if args.json:
+        print(json.dumps(out, ensure_ascii=False, indent=2))
+    else:
+        for w in written:
+            verb = "would write" if args.dry_run else "wrote"
+            print(f"  {verb} {w['target']}  (fresh={w['fresh']} reused={w['reused']})")
+            for n in w["postfix"]:
+                print(f"      postfix: {n}")
+            for n in w["upstream_warnings"]:
+                print(f"      upstream warning: {n}")
+        for r in rejected:
+            print(f"  REJECTED {r['file']} [{r['code']}] {r['message']}")
+    return 1 if rejected else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
