@@ -32,6 +32,8 @@ ln -s ~/icode/skills/i18n/i18n ~/.claude/skills/i18n
 
 One dependency: `markdown-it-py`. [`uv`](https://docs.astral.sh/uv/) on `PATH` supplies it
 per-run and installs nothing globally; a plain `python3` that already has it works too.
+Translating `.yaml` resource files additionally needs `pyyaml` — without it that path stops
+rather than hand-parsing, since a wrong guess silently corrupts a config file.
 
 ## Use
 
@@ -84,6 +86,15 @@ When a check fails, the offending chunk is sent back with the specific finding a
 rather than the whole document being retried. After two failed repair rounds it stops and
 tells you which file needs a human, and why.
 
+> [!NOTE]
+> **Anchors into another file are not rewritten.** Translating `## Getting Started` to
+> `## 快速开始` moves its anchor from `#getting-started` to `#快速开始`. Links *within* that
+> document are repointed automatically; a link from a different file
+> (`[x](./guide.md#getting-started)`) is not, and lands at the top of the page instead of the
+> section. `X-ANCHOR` warns when it can see the mismatch. Doing better needs a repo-wide
+> anchor map built after every file is translated, which is not implemented — it matters for
+> a docs site with heavy cross-linking and rarely for a README plus a few guides.
+
 ## Where state lives
 
 | Path | Commit? | Purpose |
@@ -130,17 +141,11 @@ Multi-line values are never touched. Nothing round-trips through a YAML dumper.
 Layout follows your repo's existing convention (`README.zh-CN.md`, `docs/zh-CN/`,
 `README_CN.md`, …) rather than imposing one, and relative links are rewritten to match.
 
-## Limitations
-
-- **Chunking is coarse for short documents.** A character budget with a preference for
-  H1/H2 boundaries means a short document is one chunk — editing a word in it re-translates
-  the whole body. The cache pays off on long documents and across many files.
-- **Cross-file anchors are not repaired.** Translated headings get new slugs; in-document
-  `[x](#frag)` links are repointed automatically, but a link from *another* file into a
-  translated heading is not — that only warns.
-- **mkdocs nav is not translated.** Edit it by hand.
-- **YAML resources need `pyyaml`.** Without it that path refuses to run rather than
-  hand-parsing — a wrong guess silently corrupts a config file.
+Documents are split on a character budget, preferring H1/H2 boundaries once a chunk has
+bulk, and each chunk is cached under the hash of its source text. Files whose source has not
+changed are skipped entirely. Within a file the cache is only as fine as the chunks: a
+document short enough to be a single chunk is retranslated whole when one word changes,
+while a long one reuses every section you did not touch.
 
 ## Development
 
