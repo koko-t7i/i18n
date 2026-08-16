@@ -38,10 +38,11 @@ def verify_pair(src_text: str, tgt_text: str, lang: str, rel: str, terms: list) 
     def add(code, sev, msg, **kw):
         f.append({"code": code, "severity": sev, "file": rel, "message": msg, **kw})
 
-    if t["coop_placeholders"]:
+    leaked = [p for p in t["coop_placeholders"] if p not in s["coop_placeholders"]]
+    if leaked:
         add("X-PLACEHOLDER", "error",
             "co-op placeholder tokens were left unresolved in the output",
-            actual=t["coop_placeholders"][:10])
+            expected=s["coop_placeholders"], actual=t["coop_placeholders"], leaked=leaked)
 
     if s["tokens"] != t["tokens"]:
         add("X-TOKEN", "error", "user placeholder tokens differ",

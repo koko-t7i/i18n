@@ -37,6 +37,7 @@ Lives at `<repo>/.i18n/glossary.json` and **should be committed**. Seed it by co
 | `translations.<lang>.text` | the required rendering |
 | `translations.<lang>.forbid` | renderings that must never appear |
 | `scope` | fnmatch globs limiting where the term applies; omit for everywhere |
+
 | `case_sensitive` | default `false`; set `true` for product names |
 | `severity` | `error` blocks the run, `warn` does not |
 | `notes` | appended to the prompt line; use it to disambiguate |
@@ -49,6 +50,10 @@ Lives at `<repo>/.i18n/glossary.json` and **should be committed**. Seed it by co
   product names, CLI names, protocol names.
 - **`first_use_gloss`** — with `"keep_source": true`, the first occurrence renders as
   `幂等 (idempotent)` and later ones as `幂等`. Useful for jargon a reader may not know.
+
+`scope` uses fnmatch against the repo-relative path, so `**/*.md` matches `docs/a.md` but
+**not** a root-level `README.md` — `**/` requires a directory component. Write
+`["*.md", "**/*.md"]` to cover both, or omit `scope` entirely.
 
 `forbid` is what actually stops drift. Requiring "技能" does not stop a later run from
 producing "技巧" somewhere else in the document; listing "技巧" under `forbid` does.

@@ -378,7 +378,9 @@ def inventory(text: str) -> dict:
     for m in _LINK_RE.finditer(masked):
         (images if m.group(1) else links).append(m.group(3))
     return {
-        "coop_placeholders": sorted(COOP_PLACEHOLDER_RE.findall(text)),
+        # Scanned on the masked text: a document that *documents* these tokens writes them
+        # inside backticks, and that is not a failed restoration.
+        "coop_placeholders": sorted(COOP_PLACEHOLDER_RE.findall(masked)),
         "tokens": sorted(USER_TOKEN_RE.findall(masked)),
         "html_tags": sorted(f"{'/' if c else ''}{n.lower()}" for c, n in _HTML_TAG_RE.findall(masked)),
         "fence_infos": [i for i, _ in fences],

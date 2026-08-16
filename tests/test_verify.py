@@ -105,8 +105,14 @@ class TestVerifyNegative(unittest.TestCase):
         self.assertIn("X-CHATTER", codes(SRC, "以下是翻译：\n\n" + GOOD))
 
     def test_unresolved_coop_placeholder(self):
-        self.assertIn("X-PLACEHOLDER", codes(SRC, GOOD.replace("npm install --save demo",
-                                                               "@@CODE_BLOCK_0@@")))
+        self.assertIn("X-PLACEHOLDER", codes(SRC, GOOD.replace("使用 `{count}` 占位符",
+                                                               "使用 @@CODE_BLOCK_0@@ 占位符")))
+
+    def test_documented_placeholder_in_inline_code_is_not_a_leak(self):
+        # A doc that explains these tokens writes them in backticks; that is not a failure.
+        src = SRC + "\nCode becomes `@@CODE_BLOCK_n@@` before translation.\n"
+        tgt = GOOD + "\n代码在翻译前会变成 `@@CODE_BLOCK_n@@`。\n"
+        self.assertNotIn("X-PLACEHOLDER", codes(src, tgt))
 
     def test_untranslated_document_warns(self):
         warns = {f["code"] for f in verify_pair(SRC, SRC, "zh-CN", "README.md", [])
