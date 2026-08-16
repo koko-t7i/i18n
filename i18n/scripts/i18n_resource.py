@@ -91,8 +91,9 @@ def read_resource(path: Path) -> tuple[object, dict[str, str], str]:
             import yaml  # optional; degrade with a clear message rather than guessing
         except ImportError:
             raise SystemExit(
-                "error: YAML support needs pyyaml. Re-run through run.sh, or translate this "
-                "file as JSON. Refusing to hand-parse YAML -- a wrong guess corrupts config."
+                "error: YAML support needs pyyaml, which run.sh supplies via uv. Install uv, "
+                "or `pip install pyyaml`. Refusing to hand-parse YAML -- a wrong guess "
+                "silently corrupts a config file."
             )
         data = yaml.safe_load(raw)
         return data, flatten(data), fmt

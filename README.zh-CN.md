@@ -28,10 +28,12 @@ git clone git@github.com:koko-t7i/i18n.git ~/icode/skills/i18n
 ln -s ~/icode/skills/i18n/i18n ~/.claude/skills/i18n
 ```
 
-只有一个依赖：`markdown-it-py`。`PATH` 中有 [`uv`](https://docs.astral.sh/uv/) 时它会按次提供该依赖、
-不做任何全局安装；已经装好该依赖的普通 `python3` 也可以直接用。
-翻译 `.yaml` 资源文件还需要 `pyyaml` —— 缺少它时该路径会直接停下而不是去手工解析，
-因为猜错一次就会静默损坏一个配置文件。
+需要 `PATH` 中有 [`uv`](https://docs.astral.sh/uv/)。它会按次提供两个依赖
+（`markdown-it-py`、`pyyaml`）且不做任何全局安装，因此没有额外的配置步骤。
+
+没有 `uv` 时会回落到系统 `python3`，能跑到哪一步取决于那个解释器自带的库：
+缺 `markdown-it-py` 会让围栏识别降级为正则扫描并给出告警，
+缺 `pyyaml` 则会让 YAML 资源路径直接停下，而不是去猜测语法。
 
 ## 使用
 

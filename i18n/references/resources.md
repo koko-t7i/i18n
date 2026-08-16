@@ -30,8 +30,9 @@ non-string values are copied through unchanged.
 | `.properties` | line grammar | line-by-line substitution, comments and blank lines preserved |
 | `.po` / `.pot` | `msgid`/`msgstr` pairs | `msgstr` substituted, `msgid` untouched |
 
-If `pyyaml` is unavailable the YAML path **refuses to run** rather than hand-parsing. A
-wrong guess silently corrupts a config file, which is worse than stopping.
+`run.sh` supplies `pyyaml` through `uv`, so the YAML path works out of the box. On a system
+`python3` without it, that path **refuses to run** rather than hand-parsing — a wrong guess
+silently corrupts a config file, which is worse than stopping.
 
 ## Subagent contract
 

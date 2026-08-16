@@ -30,10 +30,12 @@ git clone git@github.com:koko-t7i/i18n.git ~/icode/skills/i18n
 ln -s ~/icode/skills/i18n/i18n ~/.claude/skills/i18n
 ```
 
-One dependency: `markdown-it-py`. [`uv`](https://docs.astral.sh/uv/) on `PATH` supplies it
-per-run and installs nothing globally; a plain `python3` that already has it works too.
-Translating `.yaml` resource files additionally needs `pyyaml` — without it that path stops
-rather than hand-parsing, since a wrong guess silently corrupts a config file.
+Needs [`uv`](https://docs.astral.sh/uv/) on `PATH`. It supplies the two dependencies
+(`markdown-it-py`, `pyyaml`) per-run and installs nothing globally, so there is no setup step.
+
+Without `uv` it falls back to the system `python3` and runs as far as that interpreter's
+libraries allow: no `markdown-it-py` degrades fence detection to a regex scanner with a
+warning, and no `pyyaml` stops the YAML resource path rather than guessing at the syntax.
 
 ## Use
 

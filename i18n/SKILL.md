@@ -21,8 +21,9 @@ Translation runs as a pipeline: a script plans the work and hands out chunks, **
 the actual translating**, and a script reassembles and verifies. You orchestrate; you do not
 translate whole documents yourself in the main thread.
 
-Everything is this skill's own code. The only third-party dependency is `markdown-it-py`,
-used for CommonMark-accurate fence detection; `run.sh` supplies it via `uv`.
+Everything is this skill's own code. `run.sh` runs each script through `uv`, which supplies
+its two dependencies (`markdown-it-py` for CommonMark-accurate fence detection, `pyyaml` for
+YAML resource files) per-run. Always invoke the scripts through `run.sh`.
 
 ## Hard rules
 
@@ -100,5 +101,6 @@ Each subagent gets exactly one task file. Its prompt must state:
 ln -s <repo>/i18n ~/.claude/skills/i18n
 ```
 
-`run.sh` runs the scripts through `uv run --with markdown-it-py`, falling back to a bare
-`python3` when the parser is already importable. Nothing is installed globally.
+`run.sh` runs each script through `uv`, which provides the dependencies per-run and installs
+nothing globally. Without `uv` it falls back to the system `python3`, which works only as far
+as that interpreter's libraries allow — see `references/workflow.md`.

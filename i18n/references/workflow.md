@@ -4,18 +4,23 @@ Read this when a run behaves unexpectedly, or when you need to reason about cach
 
 ## Dependencies
 
-`run.sh` prefers `uv`:
+`uv` is the expected environment. `run.sh` runs:
 
 ```bash
-uv run --with markdown-it-py python <script>.py
+uv run --with markdown-it-py --with pyyaml python <script>.py
 ```
 
-and falls back to a bare `python3` when `markdown-it-py` is already importable.
-**`markdown-it-py` is the only third-party dependency** (it pulls just `mdurl`).
+Two dependencies, supplied per-run, nothing installed globally.
 
-Everything still imports without it — `_md` falls back to a regex scanner and warns once —
-but that fallback mis-slices fences nested inside blockquotes (`> ```bash`) or list items.
-The unit tests skip the container-nesting cases when the parser is absent.
+| Library | Used for | Missing |
+|---|---|---|
+| `markdown-it-py` | CommonMark-accurate fence detection | `_md` falls back to a regex scanner and warns once |
+| `pyyaml` | `.yaml` resource files | that path stops rather than hand-parsing |
+
+Without `uv`, `run.sh` falls back to the system `python3` and prints a note. That path works
+only as far as the interpreter's own libraries go. The regex fallback mis-slices fences
+nested inside blockquotes (`> ```bash`) or list items, so the unit tests skip the
+container-nesting cases when the parser is absent.
 
 ## The job / chunk model
 
