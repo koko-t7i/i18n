@@ -130,24 +130,6 @@ Multi-line values are never touched. Nothing round-trips through a YAML dumper.
 Layout follows your repo's existing convention (`README.zh-CN.md`, `docs/zh-CN/`,
 `README_CN.md`, …) rather than imposing one, and relative links are rewritten to match.
 
-<details>
-<summary>Previously built on Azure/co-op-translator</summary>
-
-Chunking and reassembly used to come from
-[Azure/co-op-translator](https://github.com/Azure/co-op-translator) (MIT), vendored as a
-pinned submodule. To call three functions it cost **182 transitive packages** — the whole
-Azure AI SDK, semantic-kernel, openai, numpy — plus a 20 MB font bundle used only for image
-translation. It also silently rewrote `**加粗**` to `<strong>加粗</strong>` for CJK targets,
-dropped code blocks without warning when a placeholder went missing, and destroyed
-frontmatter comments through `yaml.dump`.
-
-The replacement was validated by running both implementations over the same 16-document
-corpus and diffing. Code-block extraction matched exactly on every document; the only
-differences were the three behaviours dropped on purpose, plus one where upstream was
-corrupting input outright — on a 4000-word paragraph it split mid-paragraph, joined the
-pieces with a newline, and duplicated the heading.
-</details>
-
 ## Limitations
 
 - **Chunking is coarse for short documents.** A character budget with a preference for

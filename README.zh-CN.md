@@ -123,20 +123,6 @@ frontmatter 是**就地编辑而非重新序列化**：原始块逐字保留，�
 布局沿用你仓库既有的约定（`README.zh-CN.md`、`docs/zh-CN/`、`README_CN.md` 等）
 而非强加一种，并重写相对链接以保持一致。
 
-<details>
-<summary>曾经构建于 Azure/co-op-translator 之上</summary>
-
-分块与重组过去来自 [Azure/co-op-translator](https://github.com/Azure/co-op-translator)（MIT 许可），
-以锁定 commit 的 submodule 形式引入。为了调用三个函数，它的代价是 **182 个传递依赖包**——
-整套 Azure AI SDK、semantic-kernel、openai、numpy——外加一个 20 MB、仅用于图片翻译的字体包。
-它还会在 CJK 目标语下静默地把 `**加粗**` 改写成 `<strong>加粗</strong>`，
-在占位符丢失时不加警告地丢掉代码块，并通过 `yaml.dump` 摧毁 frontmatter 里的注释。
-
-替换方案的验证方式是：让两套实现跑同一批 16 篇语料并逐项比对。代码块提取在每一篇上都完全一致；
-全部差异只是那三项被刻意舍弃的行为，外加一项上游本身在损坏输入——在一个 4000 词的段落上，
-它从段落中间切开、用换行拼接各片段，并把标题复制了一份。
-</details>
-
 ## 已知限制
 
 - **短文档的分块粒度偏粗。** 采用字符预算并倾向于在 H1/H2 处切分，因此一篇短文档就是一个分块——
