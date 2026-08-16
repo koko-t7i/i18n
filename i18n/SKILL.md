@@ -1,16 +1,9 @@
 ---
 name: i18n
 description: >-
-  Translate and localize documentation and i18n resources: Markdown/MDX docs, README,
-  SKILL.md, docs/** trees, JSON/YAML/PO/.properties message files. Use when the user says
-  翻译文档, 翻译 README, 翻译成中文, 中文文档, 英文文档, 双语文档, 本地化, 国际化, i18n, l10n,
-  多语言, 语言包, 术语表, 更新翻译, 补齐翻译, 同步翻译, 只翻译改动的部分, 检查翻译, 校对译文,
-  translate docs, translate README, localize documentation, sync or refresh translations,
-  add a Chinese/Japanese/Korean version, check translation consistency, or verify that a
-  translated document still matches the original structure. Re-translates only what changed
-  via content hashing, and verifies structural parity (code blocks, inline code, links,
-  placeholders, headings, resource keys) before accepting output. Not for translating
-  source-code comments or user-facing strings embedded in source code.
+  Translate docs and i18n resource files, and keep translations in sync with their source.
+  Use for 翻译文档, 本地化, 国际化, 多语言, 术语表, 同步翻译, 检查翻译, translate docs, localize,
+  sync translations. Not for code comments or in-code strings.
 license: MIT
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task
 ---
