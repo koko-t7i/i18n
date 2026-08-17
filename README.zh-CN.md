@@ -67,13 +67,8 @@ Docusaurus 请改为翻译 `i18n/<locale>/**.json` —— 那属于资源文件�
 
 失败时只有出问题的那个分块会带着具体发现被退回重译。两轮之后就停下，并点名哪个文件需要人工介入。
 
-上面每一项检查比对的都是*结构*。译文读起来流畅却说错了，它们一项都察觉不到 —— 为此还有下面
-两个阶段。
-
-## 修订与校对
-
-结构检查能抓出被弄坏的代码围栏，却抓不出一段读起来天衣无缝、意思却与原文相反的文字。专业实践
-把这件事拆成两项工作，本技能沿用这个划分：
+以上比对的都是*结构*，抓不出一段读起来天衣无缝、意思却与原文相反的文字。为此还有两个阶段，
+而且刻意把它们分开：
 
 | 阶段 | 看到什么 | 判定什么 | 是否阻断？ |
 |---|---|---|---|
@@ -81,35 +76,17 @@ Docusaurus 请改为翻译 `i18n/<locale>/**.json` —— 那属于资源文件�
 | **校对** | **仅译文** | 流畅度、风格、locale | 否 |
 
 校对者看不到原文，这是方法本身而非疏漏：一句与原文严丝合缝对应的话读起来就是对的，即便没有任何
-母语作者会那样表达。只有看不到原文的人才会注意到。
+母语作者会那样表达。每个阶段都会让每个文件多一次模型调用，因此它是一项选择 —— 参见
+[`review.md`](i18n/references/review.md)。
 
-每个阶段都会让每个文件多一次模型调用，因此它是一项选择 —— 翻译记忆与下面的风格指南不花任何
-代价，且始终开启。
-
-```bash
-run.sh review plan    --root . --lang zh-CN --mode revision
-run.sh review collect --root . --run <run_id>
-```
-
-发现的问题以本地化行业的 MQM 错误分类体系返回，并接入既有的修复回路。参见
-[`i18n/references/review.md`](i18n/references/review.md)。
-
-## 术语与风格
-
-两个可选文件，都需要提交，都与状态文件放在一起：
-
-| 文件 | 约束什么 |
-|---|---|
-| `<state-dir>/glossary.json` | 单个词 —— 必需译法、被禁译法、需要保留英文的术语 |
-| `<state-dir>/style.json` | 词与词之间的一切 —— 语域、读者、如何称呼读者、引号、CJK/Latin 间距、术语表未列出的术语该怎么处理 |
-
-没有术语表，术语会在多次运行之间漂移。没有风格文件，行文也一样。其中三项风格约定会作为
-`X-STYLE` 由机器检查；其余则作为一份共享定义，同时送达翻译者、修订者与校对者。
+两个可选文件，都需要提交，让多次运行之间保持一致：
+[`glossary.json`](i18n/references/glossary.md) 约束单个词，
+[`style.json`](i18n/references/style.md) 约束词与词之间的一切 —— 语域、如何称呼读者、引号、
+CJK/Latin 间距。
 
 > [!NOTE]
-> **来自其他文件的锚点不会被改写。** 把 `## Getting Started` 翻译后，它的锚点变成 `#快速开始`。
-> 该文档内部的链接会被自动重新指向；来自另一个文件的则不会，点过去会落在页面顶部。
-> `X-ANCHOR` 会告警。要修好它需要在所有文件翻译完成后再建一张全仓库的锚点映射表——尚未实现，
+> **来自其他文件的锚点不会被改写。** 翻译标题会让它的锚点随之改变，来自*其他*文件、指向它的
+> 链接就会落在页面顶部。`X-ANCHOR` 会告警。要修好它需要一张全仓库的锚点映射表 —— 尚未实现，
 > 而且它对互相深链的文档站影响远大于「一个 README 加几篇指南」。
 
 ## 状态文件存放位置
@@ -128,46 +105,25 @@ run.sh review collect --root . --run <run_id>
 一旦分裂就会悄悄把所有内容重新翻译一遍。`--state-dir` 可以覆盖这一选择。
 
 > [!IMPORTANT]
-> 常见的 `.gitignore` 写法是整体拒绝 `.claude/`（或 `.codex/`）。在这类仓库里 `state.json` 会被
-> 静默排除在版本控制之外，下一次全新 clone 就会把所有内容重新翻译一遍。本技能会在开始干活之前
-> 执行 `git check-ignore` 并对此告警。要么把它放行 —— `!.claude/i18n/` 再加 `.claude/i18n/work/`
-> —— 要么让本技能把状态放到 `.i18n/`。
+> 常见的 `.gitignore` 写法是整体拒绝 `.claude/`（或 `.codex/`），这会静默地把 `state.json` 排除在
+> 版本控制之外，下一次全新 clone 就会把所有内容重新翻译一遍。本技能会先执行 `git check-ignore`
+> 并告警。把它放行 —— `!.claude/i18n/` 再加 `.claude/i18n/work/` —— 或者把状态放到 `.i18n/`。
 
 ## 工作原理
 
-脚本负责判定什么是事实，子代理负责写文字。下图中恰好有三个方框会调用模型 —— 翻译者与
-两轮审校。其余部分全都是确定性的。
+脚本负责判定什么是事实，子代理负责写文字。有三个方框会调用模型 —— 翻译者与两轮审校 ——
+其余部分全都是确定性的。虚线箭头写状态或回环；任何失败都会从 `plan` 重新进入，它只为出问题的
+那些分块重新派发任务。
 
 ```mermaid
-flowchart TD
-    SRC["Source docs<br>README.md · docs/**"] --> PLAN
-    CFG["glossary.json · style.json<br>terminology · register · punctuation"] --> PLAN
-    ST[("state.json<br>source hashes · chunk cache<br>translation memory")] --> PLAN
-
-    PLAN["plan<br>scan · diff · chunk · match against memory"] --> TASK
-
-    TASK["tasks — one per chunk that needs a model<br>exact hit → reused free · near hit → edit the previous<br>miss → translate from scratch"] --> SUB
-
-    SUB["subagents<br>one per task, ~6 in flight"] --> APPLY
-
-    APPLY["apply<br>reassemble · assert placeholders · write"] --> VERIFY
-    APPLY -.->|"record both sides"| ST
-
-    VERIFY["verify<br>X-* structural checks"] --> REVISION
-    REVISION["review --mode revision<br>bilingual — does it mean the same?"] --> PROOF
-    PROOF["review --mode proofread<br>monolingual — does it read like the language?"] --> OUT(["translated docs<br>+ committed lockfile"])
-
-    VERIFY -.->|"fail"| PLAN
-    REVISION -.->|"major / critical"| PLAN
+flowchart LR
+    PLAN["plan"] --> SUB["subagents"] --> APPLY["apply"] --> V["verify<br>structure"]
+    V --> R["revision<br>meaning"] --> P["proofread<br>fluency"] --> OUT(["done"])
+    ST[("state.json")] -.-> PLAN
+    APPLY -.-> ST
+    V -. "fail" .-> PLAN
+    R -. "major" .-> PLAN
 ```
-
-这张图想说明三件事。缓存有**三层**而不是两层 —— 精确命中不花任何代价，近似命中会变成一次
-编辑而非重写，只有真正未命中才会从零翻译。**任何失败都会从 `plan` 重新进入**，它会重新分块，
-并只为出问题的那些分块派发任务，因此一个被打回的句子绝不会让整篇文档重跑一遍。而最后两轮
-**并不是把同一项检查做两遍**：修订同时握有两份文本、判断意思，校对只看得到译文、判断它读起来
-是否像这门语言。
-
-虚线箭头是那些写状态或回环的箭头；实线路径是一切顺利时的走法。
 
 ### 子代理无法破坏代码块
 
@@ -193,23 +149,16 @@ flowchart TD
 文档按字符预算切分、优先在 H1/H2 处断开，每个分块以其源文本的哈希为键缓存。未变动的
 文件会被整体跳过。
 
-在单个文件内部，缓存的精细程度取决于分块，因此只有一个分块的文档一旦改动一个词就不再有
-精确命中。这就是第二层的用处：状态文件把每个分块的**原文**与它的译文并存，于是变动过的
-分块会与最接近的上一个版本比对，并作为一次**编辑**交给翻译者 —— 旧译文、旧原文、相似度
-—— 而不是一张白纸。原文没有变化的句子会原样通过。
-
-没有它，改一个词就会把整页重新措辞一遍，而每个评审者都得重读一份本不需要变动的译文。
-在本仓库自己的 README 上实测：不带上一版译文是 54 行新增、44 行删除，带上则是 19 与 9。
+缓存的精细程度取决于分块，因此短文档一旦改动一个词就不再有精确命中。于是状态文件把每个
+分块的**原文**与它的译文并存：变动过的分块会与最接近的上一个版本比对，并作为一次**编辑**
+交给翻译者，而不是一张白纸。在本 README 上实测 —— 不带上一版译文是 54 行新增、44 行删除，
+带上则是 34 与 **0**。
 
 ## 开发
 
-参见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+`uv run --with ruff ruff check .` 与 `python3 -m unittest discover tests`。其余部分，
+包括那些会咬到你的坑，都在 [CONTRIBUTING.md](CONTRIBUTING.md) 里。
 
-```bash
-uv run --with ruff ruff check .
-python3 -m unittest discover tests -v
-```
-
-## 许可
+## 许可证
 
 MIT。

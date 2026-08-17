@@ -71,54 +71,29 @@ Warnings only: `X-DEADLINK`, `X-ANCHOR`, `X-UNTRANSLATED`, `X-ORPHAN`, `X-STYLE`
 On failure only the offending chunk is retried, with the finding attached. After two rounds
 it stops and names the file that needs a human.
 
-Every check above compares *structure*. None of them can tell you the translation is fluent
-and wrong — for that there are two more passes, below.
-
-## Revision and proofreading
-
-Structure checks catch a mangled code fence. They cannot catch a paragraph that reads
-perfectly and says the opposite of the source. Professional practice splits that into two
-jobs, and this follows it:
+All of that compares *structure*. It cannot catch a paragraph that reads perfectly and says
+the opposite of the source. Two further passes do, and they are kept apart on purpose:
 
 | Pass | Sees | Judges | Blocks? |
 |---|---|---|---|
 | **revision** | source **and** translation | accuracy, terminology, audience fit | yes |
 | **proofread** | **translation only** | fluency, style, locale | no |
 
-The proofreader is not shown the source, and that is the method rather than an oversight: a
+The proofreader is not shown the source, which is the method rather than an oversight: a
 sentence that maps neatly onto its source reads as correct even when no native writer would
-phrase it that way. Only someone who cannot see the original notices.
+phrase it that way. Each pass costs one model call per file, so it is opt-in — see
+[`review.md`](i18n/references/review.md).
 
-Each pass costs one extra model call per file, so it is a choice — translation memory and
-the style guide below cost nothing and are always on.
-
-```bash
-run.sh review plan    --root . --lang zh-CN --mode revision
-run.sh review collect --root . --run <run_id>
-```
-
-Findings come back in the localisation industry's MQM error typology and feed the existing
-repair loop. See [`i18n/references/review.md`](i18n/references/review.md).
-
-## Terminology and style
-
-Two optional files, both committed, both living beside the state:
-
-| File | Fixes |
-|---|---|
-| `<state-dir>/glossary.json` | individual words — required renderings, forbidden ones, terms to leave in English |
-| `<state-dir>/style.json` | everything between them — register, audience, how the reader is addressed, quotation marks, CJK/Latin spacing, what to do with terms the glossary does not list |
-
-Without a glossary, terminology drifts between runs. Without a style file, so does the
-prose. Three of the style conventions are machine-checked as `X-STYLE`; the rest reach the
-translator, the reviser and the proofreader as one shared definition.
+Two optional files, both committed, keep runs consistent with each other:
+[`glossary.json`](i18n/references/glossary.md) fixes individual words,
+[`style.json`](i18n/references/style.md) fixes everything between them — register, how the
+reader is addressed, quotation marks, CJK/Latin spacing.
 
 > [!NOTE]
-> **Anchors from another file are not rewritten.** Translating `## Getting Started` moves its
-> anchor to `#快速开始`. Links within that document are repointed automatically; one from a
-> different file is not, and lands at the top of the page. `X-ANCHOR` warns. Fixing it needs
-> a repo-wide anchor map built after every file is translated — not implemented, and it
-> matters for a cross-linked docs site far more than for a README plus a few guides.
+> **Anchors from another file are not rewritten.** Translating a heading moves its anchor,
+> and links to it from *other* files land at the top of the page instead. `X-ANCHOR` warns.
+> Fixing it needs a repo-wide anchor map — not implemented, and it matters far more for a
+> cross-linked docs site than for a README plus a few guides.
 
 ## Where state lives
 
@@ -133,52 +108,31 @@ for Codex.
 | `<state-dir>/work/` | no | per-run scratch — gitignore it |
 
 A repo that already has one keeps it, whichever agent you open it with — two lockfiles cannot
-see each other's chunk cache, and a split would silently re-translate everything. `--state-dir`
-overrides the choice.
+see each other's chunk cache, and a split would silently re-translate everything.
+`--state-dir` overrides the choice.
 
 > [!IMPORTANT]
-> The common `.gitignore` recipe denies `.claude/` (or `.codex/`) wholesale. In such a repo
-> `state.json` is silently untracked and the next fresh clone re-translates everything. The
-> skill runs `git check-ignore` before doing any work and warns you. Either allowlist it —
-> `!.claude/i18n/` then `.claude/i18n/work/` — or tell the skill to keep state in `.i18n/`.
+> The common `.gitignore` recipe denies `.claude/` (or `.codex/`) wholesale, which silently
+> untracks `state.json` and makes the next fresh clone re-translate everything. The skill
+> runs `git check-ignore` first and warns. Allowlist it — `!.claude/i18n/` then
+> `.claude/i18n/work/` — or keep state in `.i18n/`.
 
 ## How it works
 
-Scripts decide what is true; subagents write prose. Exactly three boxes below call a model —
-the translators and the two review passes. Everything else is deterministic.
+Scripts decide what is true; subagents write prose. Three boxes call a model — the
+translators and the two review passes — and everything else is deterministic. Dashed arrows
+write state or loop back; every failure re-enters at `plan`, which re-emits tasks for the
+offending chunks alone.
 
 ```mermaid
-flowchart TD
-    SRC["Source docs<br>README.md · docs/**"] --> PLAN
-    CFG["glossary.json · style.json<br>terminology · register · punctuation"] --> PLAN
-    ST[("state.json<br>source hashes · chunk cache<br>translation memory")] --> PLAN
-
-    PLAN["plan<br>scan · diff · chunk · match against memory"] --> TASK
-
-    TASK["tasks — one per chunk that needs a model<br>exact hit → reused free · near hit → edit the previous<br>miss → translate from scratch"] --> SUB
-
-    SUB["subagents<br>one per task, ~6 in flight"] --> APPLY
-
-    APPLY["apply<br>reassemble · assert placeholders · write"] --> VERIFY
-    APPLY -.->|"record both sides"| ST
-
-    VERIFY["verify<br>X-* structural checks"] --> REVISION
-    REVISION["review --mode revision<br>bilingual — does it mean the same?"] --> PROOF
-    PROOF["review --mode proofread<br>monolingual — does it read like the language?"] --> OUT(["translated docs<br>+ committed lockfile"])
-
-    VERIFY -.->|"fail"| PLAN
-    REVISION -.->|"major / critical"| PLAN
+flowchart LR
+    PLAN["plan"] --> SUB["subagents"] --> APPLY["apply"] --> V["verify<br>structure"]
+    V --> R["revision<br>meaning"] --> P["proofread<br>fluency"] --> OUT(["done"])
+    ST[("state.json")] -.-> PLAN
+    APPLY -.-> ST
+    V -. "fail" .-> PLAN
+    R -. "major" .-> PLAN
 ```
-
-Three things the diagram is trying to say. The cache has **three tiers**, not two — an
-exact hit costs nothing, a near hit becomes an edit rather than a rewrite, and only a real
-miss is translated from scratch. **Every failure re-enters at `plan`**, which re-chunks and
-emits tasks for the offending chunks alone, so a rejected sentence never re-runs a document.
-And the last two passes are **not the same check twice**: revision holds both texts and
-judges meaning, proofreading sees only the translation and judges whether it reads like the
-language.
-
-Dashed arrows are the ones that write state or loop back; the solid path is the happy one.
 
 ### A subagent cannot break a code block
 
@@ -207,25 +161,16 @@ translation lands.
 Documents split on a character budget, preferring H1/H2 boundaries, and each chunk is cached
 under the hash of its source. Unchanged files are skipped entirely.
 
-Within a file the cache is only as fine as the chunks, so a single-chunk document has no
-exact hit once one word changes. That is where the second tier comes in: the state file
-stores each chunk's **source** next to its translation, so a changed chunk is matched
-against the nearest previous one and handed to the translator as an **edit** — old
-translation, old source, similarity ratio — rather than a blank page. Sentences whose source
-did not change come through untouched.
-
-Without it, a one-word fix re-words the entire page and every reviewer has to re-read a
-translation that did not need to change. Measured on this repository's own README: 54
-insertions and 44 deletions without the previous translation, 19 and 9 with it.
+The cache is only as fine as the chunks, so a short document has no exact hit once one word
+changes. The state file therefore stores each chunk's **source** beside its translation: a
+changed chunk is matched against the nearest previous one and handed over as an **edit**,
+not a blank page. Measured on this README — 54 insertions and 44 deletions without the
+previous translation, 34 and **0** with it.
 
 ## Development
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-```bash
-uv run --with ruff ruff check .
-python3 -m unittest discover tests -v
-```
+`uv run --with ruff ruff check .` and `python3 -m unittest discover tests`. The rest,
+including the things that will bite you, is in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
