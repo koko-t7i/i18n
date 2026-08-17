@@ -45,8 +45,8 @@ fine, so the HTML is unwanted noise — send the chunk back rather than acceptin
 ## Repair loop
 
 ```bash
-run.sh verify --root . --lang zh-CN --json > .claude/i18n/work/<run>/verify.json
-run.sh plan   --root . --lang zh-CN --repair .claude/i18n/work/<run>/verify.json
+run.sh verify --root . --lang zh-CN --json > <state-dir>/work/<run>/verify.json
+run.sh plan   --root . --lang zh-CN --repair <state-dir>/work/<run>/verify.json
 # fan out the new tasks, then apply and verify again
 ```
 

@@ -105,7 +105,7 @@ _SIBLING_PATTERNS = [
 ]
 
 _SKIP_DIRS = {
-    ".git", ".claude", ".i18n", "node_modules", "__pycache__", ".venv", "venv",
+    ".git", ".claude", ".codex", ".i18n", "node_modules", "__pycache__", ".venv", "venv",
     "vendor", ".worktrees", "dist", "build", ".cache",
 }
 

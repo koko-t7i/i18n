@@ -5,7 +5,6 @@ description: >-
   Use for 翻译文档, 本地化, 国际化, 多语言, 术语表, 同步翻译, 检查翻译, translate docs, localize,
   sync translations. Not for code comments or in-code strings.
 license: MIT
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task
 ---
 
 # i18n — documentation translation
@@ -33,12 +32,17 @@ YAML resource files) per-run. Always invoke the scripts through `run.sh`.
 ## Quick start
 
 ```bash
-S=~/.claude/skills/i18n/scripts          # or the repo path
+S=~/.claude/skills/i18n/scripts          # Codex: ~/.codex/skills/i18n/scripts
 $S/run.sh plan  --root . --lang zh-CN --paths 'README.md' 'docs/**/*.md'
-# ... fan out one Task subagent per file in .claude/i18n/work/<run>/tasks/ ...
+# ... fan out one subagent per file in <state-dir>/work/<run>/tasks/ ...
 $S/run.sh apply  --root . --run <run_id>
 $S/run.sh verify --root . --lang zh-CN
 ```
+
+`<state-dir>` is resolved for you: whichever state directory the repository already has,
+otherwise `.claude/i18n` under Claude Code and `.codex/i18n` under Codex. The `work_dir` in
+`plan --json` shows which one was picked. Override it with `--state-dir` — on every command
+of a run, not just the first.
 
 ## Workflow
 
@@ -46,23 +50,26 @@ $S/run.sh verify --root . --lang zh-CN
 2. **Detect layout** — `run.sh plan --detect-layout-only --root . --lang zh-CN`. If
    `confidence < 0.8`, read `references/layout.md`, show the user the two candidate layouts,
    and pass `--layout` / `--layout-pattern`.
-3. **Glossary** *(optional)* — if `.claude/i18n/glossary.json` is absent, offer to seed it from
+3. **Glossary** *(optional)* — if `<state-dir>/glossary.json` is absent, offer to seed it from
    `assets/glossary.example.json`. Running without one is fine.
 4. **Plan** — `run.sh plan --root . --lang <lang> [--paths ...] --json`. Read the summary.
    - `conflicts` non-empty → surface each to the user and stop until they decide.
    - `task_count == 0` → everything is current; say so and stop.
    - `truncated_tasks > 0` → say so; a second run is needed after this batch.
 5. **Read the reference the plan points at** — normally none. Only when routing says so.
-6. **Fan out** — one `Task` subagent per file in `.claude/i18n/work/<run>/tasks/`, about 6 per
-   message. See the subagent contract below.
+6. **Fan out** — one subagent per task file in `<state-dir>/work/<run>/tasks/`, about 6 in
+   flight at a time. Claude Code: the `Task` tool. Codex: spawn that many subagents in
+   parallel. If the harness you are running under has no subagent mechanism at all, work
+   through the task files yourself one at a time — same contract, just serial. See the
+   subagent contract below.
 7. **Apply** — `run.sh apply --root . --run <run_id>`. Rejected files are listed with a
    code; re-dispatch just those tasks.
 8. **Verify** — `run.sh verify --root . --lang <lang> --json`.
 9. **Repair on failure** — read `references/verification.md`, then
-   `run.sh plan --repair .claude/i18n/work/<run>/verify.json` and return to step 6.
+   `run.sh plan --repair <state-dir>/work/<run>/verify.json` and return to step 6.
    **Retry budget: 2.** After that, report exactly which files need a human and why.
 10. **Report** — files written, chunks fresh vs reused, verify verdict. Do not commit unless
-    asked; if committing, stage the translated files and `.claude/i18n/state.json` together.
+    asked; if committing, stage the translated files and `<state-dir>/state.json` together.
 
 ## Routing
 
@@ -88,10 +95,19 @@ Each subagent gets exactly one task file. Its prompt must state:
 6. Return no commentary, no ```` ```markdown ```` wrapper, no "here is the translation".
 7. Do not touch any file in the repository.
 
+When the file already has a translation, add two more: give the subagent the existing
+translation and tell it to **keep the settled wording**, rewriting only what the source
+changed — a short document is one chunk, so one edited word otherwise re-words the whole
+page. And a *switch-language* link at the top points the other way in the translated file:
+`[简体中文](README.zh-CN.md)` becomes `[English](README.md)`, not a link to itself.
+
 ## Installation
 
+One directory serves both harnesses; link it wherever you need it.
+
 ```bash
-ln -s <repo>/i18n ~/.claude/skills/i18n
+ln -s <repo>/i18n ~/.claude/skills/i18n     # Claude Code
+ln -s <repo>/i18n ~/.codex/skills/i18n      # Codex
 ```
 
 `run.sh` runs each script through `uv`, which provides the dependencies per-run and installs

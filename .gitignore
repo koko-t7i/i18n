@@ -3,4 +3,5 @@ __pycache__/
 .venv/
 venv/
 .claude/i18n/work/
+.codex/i18n/work/
 .DS_Store

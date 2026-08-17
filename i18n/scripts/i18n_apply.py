@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import _adapter as A  # noqa: E402
 import _job  # noqa: E402
-from _paths import add_state_dir_arg, resolve_state_dir  # noqa: E402
+from _paths import add_state_dir_arg, resolve_state_dir, run_main  # noqa: E402
 from _state import State, sha  # noqa: E402
 
 
@@ -163,4 +163,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(run_main(main))

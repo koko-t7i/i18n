@@ -4,8 +4,9 @@
 
 [简体中文](README.zh-CN.md)
 
-An agent skill for [Claude Code](https://claude.com/claude-code). Subagents write the prose;
-scripts do everything that must not be left to a model. No translation API, no API keys.
+An agent skill for [Claude Code](https://claude.com/claude-code) and
+[Codex](https://developers.openai.com/codex). Subagents write the prose; scripts do
+everything that must not be left to a model. No translation API, no API keys.
 
 ## Why not just ask the model to translate the file?
 
@@ -22,8 +23,11 @@ three are silent:
 
 ```bash
 git clone git@github.com:koko-t7i/i18n.git ~/icode/skills/i18n
-ln -s ~/icode/skills/i18n/i18n ~/.claude/skills/i18n
+ln -s ~/icode/skills/i18n/i18n ~/.claude/skills/i18n     # Claude Code
+ln -s ~/icode/skills/i18n/i18n ~/.codex/skills/i18n      # Codex
 ```
+
+One directory, both harnesses — link whichever you use, or both.
 
 Needs [`uv`](https://docs.astral.sh/uv/) on `PATH`; it supplies `markdown-it-py` and `pyyaml`
 per-run and installs nothing globally. Without `uv` it falls back to the system `python3`,
@@ -77,16 +81,23 @@ it stops and names the file that needs a human.
 
 ## Where state lives
 
+Under the directory your agent already owns: `.claude/i18n/` for Claude Code, `.codex/i18n/`
+for Codex.
+
 | Path | Commit? | Purpose |
 |---|---|---|
-| `.claude/i18n/state.json` | **yes** | translation lockfile: source hashes and the chunk cache |
-| `.claude/i18n/glossary.json` | **yes** | terminology, if you use one |
-| `.claude/i18n/work/` | no | per-run scratch — gitignore it |
+| `<state-dir>/state.json` | **yes** | translation lockfile: source hashes and the chunk cache |
+| `<state-dir>/glossary.json` | **yes** | terminology, if you use one |
+| `<state-dir>/work/` | no | per-run scratch — gitignore it |
+
+A repo that already has one keeps it, whichever agent you open it with — two lockfiles cannot
+see each other's chunk cache, and a split would silently re-translate everything. `--state-dir`
+overrides the choice.
 
 > [!IMPORTANT]
-> The common `.gitignore` recipe denies `.claude/` wholesale. In such a repo `state.json` is
-> silently untracked and the next fresh clone re-translates everything. The skill runs
-> `git check-ignore` before doing any work and warns you. Either allowlist it —
+> The common `.gitignore` recipe denies `.claude/` (or `.codex/`) wholesale. In such a repo
+> `state.json` is silently untracked and the next fresh clone re-translates everything. The
+> skill runs `git check-ignore` before doing any work and warns you. Either allowlist it —
 > `!.claude/i18n/` then `.claude/i18n/work/` — or tell the skill to keep state in `.i18n/`.
 
 ## How it works

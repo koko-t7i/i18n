@@ -13,7 +13,17 @@
 # missing pyyaml stops the YAML resource path rather than guessing at the syntax.
 set -euo pipefail
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+# Both harnesses symlink this skill to the same repository, so the resolved path cannot say
+# which one is running. The path we were *invoked* through can: read it before resolving.
+RAW="$(dirname "${BASH_SOURCE[0]}")"
+HERE="$(cd "$RAW" && pwd -P)"
+
+if [ -z "${I18N_HARNESS:-}" ]; then
+  case "$RAW" in
+    */.codex/*)  export I18N_HARNESS=codex ;;
+    */.claude/*) export I18N_HARNESS=claude ;;
+  esac
+fi
 
 if [ $# -eq 0 ]; then
   echo "usage: run.sh <plan|apply|verify|resource> [args...]" >&2

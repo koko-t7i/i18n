@@ -72,7 +72,7 @@ nested fences and a 4000-word single paragraph.
 ## Why the cache is keyed on chunk source hash
 
 Because `finish_job` needs all chunks, incrementality cannot live at the file level. So
-`.claude/i18n/state.json` stores, per (file, language):
+`state.json` stores, per (file, language):
 
 ```jsonc
 {"target": "README.zh-CN.md", "chunker": 1, "source_sha": "...", "target_sha": "...",
@@ -110,19 +110,39 @@ without asking. Report the file, say the translation was hand-edited, and let th
 
 ## State directory
 
-Everything lives under `.claude/i18n/`, overridable with `--state-dir`:
+State is grouped under the directory the harness already owns, so nothing new appears at the
+top level. Three contents, whichever directory is picked:
 
 | Path | Committed? | Purpose |
 |---|---|---|
-| `.claude/i18n/state.json` | **yes** | translation lockfile: source hashes + chunk cache |
-| `.claude/i18n/glossary.json` | **yes** | terminology, if used |
-| `.claude/i18n/work/<run_id>/` | no | `plan.json`, `jobs/`, `tasks/`, `results/` — disposable |
+| `<state-dir>/state.json` | **yes** | translation lockfile: source hashes + chunk cache |
+| `<state-dir>/glossary.json` | **yes** | terminology, if used |
+| `<state-dir>/work/<run_id>/` | no | `plan.json`, `jobs/`, `tasks/`, `results/` — disposable |
+
+`resolve_state_dir` in `_paths.py` picks it, in this order:
+
+| | Condition | Result |
+|---|---|---|
+| 1 | `--state-dir` given | that path (relative ones resolve against `--root`) |
+| 2 | `I18N_STATE_DIR` set | same treatment |
+| 3 | `.claude/i18n`, `.codex/i18n` or `.i18n` already holds `state.json` or `glossary.json` | that one |
+| 4 | harness identified — `I18N_HARNESS` (set by `run.sh` from the path it was invoked through), else `CLAUDECODE`, else `CODEX_HOME` | `.claude/i18n` or `.codex/i18n` |
+| 5 | nothing identified it | `.claude/i18n` |
+
+Step 3 outranks the harness on purpose. A repo translated under Claude Code and later opened
+under Codex keeps its `.claude/i18n` rather than starting a second one — two `state.json`
+files cannot see each other's chunk cache, so a split re-translates the whole repo and then
+leaves two lockfiles disagreeing about it. When two of them somehow do exist, every command
+stops with exit 2 and asks for an explicit `--state-dir` instead of guessing.
+
+`.i18n` is recognised but never chosen on its own; it is the escape hatch below, and repos
+that took it keep working.
 
 A translated file whose state entry is missing looks `orphan` on the next run and gets
 re-translated from scratch, so `state.json` genuinely has to be committed.
 
-**This is the one thing that bites.** The common community `.gitignore` recipe denies
-`.claude/` wholesale and allowlists individual files:
+**This is the one thing that bites.** The common community `.gitignore` recipes deny the
+whole agent directory and allowlist individual files:
 
 ```gitignore
 .claude/
@@ -132,15 +152,23 @@ re-translated from scratch, so `state.json` genuinely has to be committed.
 
 In a repo like that, `state.json` is silently untracked. `plan` therefore runs
 `git check-ignore` on it and prints a warning naming the fix. If you see that warning, either
-allowlist the directory:
+allowlist the directory —
 
 ```gitignore
 !.claude/i18n/
 .claude/i18n/work/
 ```
 
-or move state out of `.claude/` entirely with `--state-dir .i18n`. Do not ignore the warning —
-the failure is silent and only shows up as a full re-translation in a fresh clone.
+or, under Codex:
+
+```gitignore
+!.codex/i18n/
+.codex/i18n/work/
+```
+
+— or move state out from under the agent directory entirely with `--state-dir .i18n`. Do not
+ignore the warning: the failure is silent and only shows up as a full re-translation in a
+fresh clone.
 
 ## Failure codes from `apply`
 

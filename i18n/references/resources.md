@@ -4,9 +4,9 @@ A separate path from Markdown. No chunking and no Markdown parsing — the unit 
 the structural contract is that the key set never changes.
 
 ```bash
-S=~/.claude/skills/i18n/scripts
+S=~/.claude/skills/i18n/scripts          # Codex: ~/.codex/skills/i18n/scripts
 $S/run.sh resource plan   --root . --lang zh-CN --file locales/en.json
-# fan out subagents over .claude/i18n/work/<run>/tasks/
+# fan out subagents over <state-dir>/work/<run>/tasks/
 $S/run.sh resource apply  --root . --run <run_id>
 $S/run.sh resource verify --root . --lang zh-CN --file locales/en.json
 ```

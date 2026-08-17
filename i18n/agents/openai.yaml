@@ -1,0 +1,6 @@
+interface:
+  display_name: "i18n"
+  short_description: "Translate docs and resource files, and keep them in sync with their source"
+  default_prompt: "Use $i18n to translate the documentation and keep existing translations in sync with their sources."
+policy:
+  allow_implicit_invocation: true

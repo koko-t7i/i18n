@@ -4,8 +4,9 @@
 
 [English](README.md)
 
-一个面向 [Claude Code](https://claude.com/claude-code) 的 agent 技能。子代理负责写译文；
-脚本负责一切不能交给模型的事。不需要翻译 API，也不需要任何 API 密钥。
+一个面向 [Claude Code](https://claude.com/claude-code) 与
+[Codex](https://developers.openai.com/codex) 的 agent 技能。子代理负责写译文；脚本负责
+一切不能交给模型的事。不需要翻译 API，也不需要任何 API 密钥。
 
 ## 为什么不直接让模型翻译这个文件？
 
@@ -21,8 +22,11 @@
 
 ```bash
 git clone git@github.com:koko-t7i/i18n.git ~/icode/skills/i18n
-ln -s ~/icode/skills/i18n/i18n ~/.claude/skills/i18n
+ln -s ~/icode/skills/i18n/i18n ~/.claude/skills/i18n     # Claude Code
+ln -s ~/icode/skills/i18n/i18n ~/.codex/skills/i18n      # Codex
 ```
+
+一个目录，两个 harness —— 你用哪个就链接哪个，也可以两个都链。
 
 需要 `PATH` 中有 [`uv`](https://docs.astral.sh/uv/)；它会按次提供 `markdown-it-py` 和 `pyyaml`，
 不做任何全局安装。没有 `uv` 时会回落到系统 `python3`，此时缺 `markdown-it-py` 会让围栏识别
@@ -72,16 +76,22 @@ Docusaurus 请改为翻译 `i18n/<locale>/**.json` —— 那属于资源文件�
 
 ## 状态文件存放位置
 
+就放在你的 agent 已经拥有的那个目录下：Claude Code 用 `.claude/i18n/`，Codex 用
+`.codex/i18n/`。
+
 | 路径 | 是否提交 | 用途 |
 |---|---|---|
-| `.claude/i18n/state.json` | **是** | 翻译锁文件：源文件哈希与分块缓存 |
-| `.claude/i18n/glossary.json` | **是** | 术语表，如果你用的话 |
-| `.claude/i18n/work/` | 否 | 每次运行的临时目录 —— 请 gitignore |
+| `<state-dir>/state.json` | **是** | 翻译锁文件：源文件哈希与分块缓存 |
+| `<state-dir>/glossary.json` | **是** | 术语表，如果你用的话 |
+| `<state-dir>/work/` | 否 | 每次运行的临时目录 —— 请 gitignore |
+
+仓库里已经有一个的话就沿用它，无论你用哪个 agent 打开 —— 两个锁文件看不到彼此的分块缓存，
+一旦分裂就会悄悄把所有内容重新翻译一遍。`--state-dir` 可以覆盖这一选择。
 
 > [!IMPORTANT]
-> 常见的 `.gitignore` 写法是整体拒绝 `.claude/`。在这类仓库里 `state.json` 会被静默排除在
-> 版本控制之外，下一次全新 clone 就会把所有内容重新翻译一遍。本技能会在开始干活之前执行
-> `git check-ignore` 并对此告警。要么把它放行 —— `!.claude/i18n/` 再加 `.claude/i18n/work/`
+> 常见的 `.gitignore` 写法是整体拒绝 `.claude/`（或 `.codex/`）。在这类仓库里 `state.json` 会被
+> 静默排除在版本控制之外，下一次全新 clone 就会把所有内容重新翻译一遍。本技能会在开始干活之前
+> 执行 `git check-ignore` 并对此告警。要么把它放行 —— `!.claude/i18n/` 再加 `.claude/i18n/work/`
 > —— 要么让本技能把状态放到 `.i18n/`。
 
 ## 工作原理
