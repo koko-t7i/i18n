@@ -144,6 +144,42 @@ overrides the choice.
 
 ## How it works
 
+Scripts decide what is true; subagents write prose. Exactly three boxes below call a model —
+the translators and the two review passes. Everything else is deterministic.
+
+```mermaid
+flowchart TD
+    SRC["Source docs<br>README.md · docs/**"] --> PLAN
+    CFG["glossary.json · style.json<br>terminology · register · punctuation"] --> PLAN
+    ST[("state.json<br>source hashes · chunk cache<br>translation memory")] --> PLAN
+
+    PLAN["plan<br>scan · diff · chunk · match against memory"] --> TASK
+
+    TASK["tasks — one per chunk that needs a model<br>exact hit → reused free · near hit → edit the previous<br>miss → translate from scratch"] --> SUB
+
+    SUB["subagents<br>one per task, ~6 in flight"] --> APPLY
+
+    APPLY["apply<br>reassemble · assert placeholders · write"] --> VERIFY
+    APPLY -.->|"record both sides"| ST
+
+    VERIFY["verify<br>X-* structural checks"] --> REVISION
+    REVISION["review --mode revision<br>bilingual — does it mean the same?"] --> PROOF
+    PROOF["review --mode proofread<br>monolingual — does it read like the language?"] --> OUT(["translated docs<br>+ committed lockfile"])
+
+    VERIFY -.->|"fail"| PLAN
+    REVISION -.->|"major / critical"| PLAN
+```
+
+Three things the diagram is trying to say. The cache has **three tiers**, not two — an
+exact hit costs nothing, a near hit becomes an edit rather than a rewrite, and only a real
+miss is translated from scratch. **Every failure re-enters at `plan`**, which re-chunks and
+emits tasks for the offending chunks alone, so a rejected sentence never re-runs a document.
+And the last two passes are **not the same check twice**: revision holds both texts and
+judges meaning, proofreading sees only the translation and judges whether it reads like the
+language.
+
+Dashed arrows are the ones that write state or loop back; the solid path is the happy one.
+
 ### A subagent cannot break a code block
 
 **Code blocks become `@@CODE_BLOCK_n@@` tokens before any model sees the text** and are

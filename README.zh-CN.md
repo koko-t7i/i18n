@@ -135,6 +135,40 @@ run.sh review collect --root . --run <run_id>
 
 ## 工作原理
 
+脚本负责判定什么是事实，子代理负责写文字。下图中恰好有三个方框会调用模型 —— 翻译者与
+两轮审校。其余部分全都是确定性的。
+
+```mermaid
+flowchart TD
+    SRC["Source docs<br>README.md · docs/**"] --> PLAN
+    CFG["glossary.json · style.json<br>terminology · register · punctuation"] --> PLAN
+    ST[("state.json<br>source hashes · chunk cache<br>translation memory")] --> PLAN
+
+    PLAN["plan<br>scan · diff · chunk · match against memory"] --> TASK
+
+    TASK["tasks — one per chunk that needs a model<br>exact hit → reused free · near hit → edit the previous<br>miss → translate from scratch"] --> SUB
+
+    SUB["subagents<br>one per task, ~6 in flight"] --> APPLY
+
+    APPLY["apply<br>reassemble · assert placeholders · write"] --> VERIFY
+    APPLY -.->|"record both sides"| ST
+
+    VERIFY["verify<br>X-* structural checks"] --> REVISION
+    REVISION["review --mode revision<br>bilingual — does it mean the same?"] --> PROOF
+    PROOF["review --mode proofread<br>monolingual — does it read like the language?"] --> OUT(["translated docs<br>+ committed lockfile"])
+
+    VERIFY -.->|"fail"| PLAN
+    REVISION -.->|"major / critical"| PLAN
+```
+
+这张图想说明三件事。缓存有**三层**而不是两层 —— 精确命中不花任何代价，近似命中会变成一次
+编辑而非重写，只有真正未命中才会从零翻译。**任何失败都会从 `plan` 重新进入**，它会重新分块，
+并只为出问题的那些分块派发任务，因此一个被打回的句子绝不会让整篇文档重跑一遍。而最后两轮
+**并不是把同一项检查做两遍**：修订同时握有两份文本、判断意思，校对只看得到译文、判断它读起来
+是否像这门语言。
+
+虚线箭头是那些写状态或回环的箭头；实线路径是一切顺利时的走法。
+
 ### 子代理无法破坏代码块
 
 **代码块在任何模型看到文本之前就已变成 `@@CODE_BLOCK_n@@` 标记**，并在重组时还原。
