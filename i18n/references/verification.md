@@ -32,6 +32,12 @@ Exit codes: **0** pass (warnings allowed) · **1** blocking findings · **2** us
 | `X-ORPHAN` | warn | translation exists but its source was deleted |
 | `X-DEADLINK` | warn | a relative link does not resolve from the translated file's directory |
 | `X-GLOSSARY` | error/warn | see `glossary.md` |
+| `X-STYLE` | warn | quotation system, CJK/Latin spacing, half-width punctuation between CJK — see `style.md` |
+
+Everything in that table compares **structure**. None of it can tell you the translation is
+fluent and says the opposite of the source; `revision` and `proofread` cover that, and they
+are documented separately in `review.md`. Their findings (`X-REVISION`, `X-PROOF`) arrive
+in this same shape and feed the same repair loop.
 
 `X-INLINE` catches the failure mode nothing else does: `` `{count}` `` rendered as
 `` `{数量}` ``, or a flag name like `` `--retries` `` translated. Inline code must be copied

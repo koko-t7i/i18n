@@ -23,7 +23,7 @@ items — skip themselves. Both paths ship to users, so both have to pass. CI ru
 `pytest` works too (`uv run --with pytest pytest`), via `tests/conftest.py`. The suite itself
 is plain `unittest` with no third-party dependencies, and should stay that way.
 
-## Three things that will bite you
+## Four things that will bite you
 
 **`state.json` is a lockfile and must be committed.** `.claude/i18n/state.json` records the
 source hash of every translated file. If it is missing or ignored, the next run in a fresh
@@ -41,10 +41,17 @@ throws away your edit anyway. Change `README.md`, then re-run the skill:
 ./i18n/scripts/run.sh verify --root . --lang zh-CN
 ```
 
-Commit the translation and `state.json` together. When re-translating a file that already
-has a translation, give the subagent the previous one and tell it to keep the settled
-wording — otherwise a one-word source change re-words the entire page. `i18n/SKILL.md` has
-the full subagent contract.
+Commit the translation and `state.json` together. `plan` attaches the previous translation
+itself when a chunk is a close enough match, so a task carrying `"mode": "revise"` should be
+dispatched with `assets/prompts/revise_markdown.md` — a one-word source change must not
+re-word the entire page. `i18n/SKILL.md` has the full subagent contract.
+
+**Never let a state schema bump discard state.** `_state.SCHEMA` is 2; `READABLE_SCHEMAS`
+lists every version still readable, and `load()` keeps anything on that list. Dropping an
+old schema instead would make every repository that has ever used this skill re-translate
+from scratch on the next run — silently, because the files still exist. Schema 1 chunk
+values are bare strings and schema 2 values are `{"src", "tgt"}` pairs; both shapes coexist
+in one file while a repo migrates. Add a compatibility test before you touch this.
 
 **Changing chunk boundaries means bumping `CHUNKER_VERSION`.** It lives in
 `i18n/scripts/_job.py`. Cached chunk translations are keyed on source text a different
@@ -63,3 +70,7 @@ The scripts are the part that must not be left to a model: they are where correc
 enforced. Prefer failing loudly over guessing. Every check that can reject output has a code
 (`X-*` for documents, `RES-*` for resources, `ASM-*` for reassembly) — new ones follow that
 pattern and get a row in the README table.
+
+Subjective checks are advisory, full stop. `X-STYLE` and everything from proofreading is
+`warn` and stays `warn`: gating on a judgement call produces churn, not a finished
+document. If a check cannot be stated as an assertion about the text, it does not block.

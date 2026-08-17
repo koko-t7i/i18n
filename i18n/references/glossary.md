@@ -2,6 +2,9 @@
 
 Optional. Without one, translation still works; terminology just drifts between runs.
 
+This file fixes individual words. Everything between them — register, how the reader is
+addressed, punctuation conventions — belongs in `style.json`; see `references/style.md`.
+
 Lives at `<state-dir>/glossary.json` and **should be committed**. Seed it by copying
 `assets/glossary.example.json`.
 

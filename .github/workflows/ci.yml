@@ -44,5 +44,9 @@ jobs:
       # The repo translates its own README, so its state is committed and current. A plan
       # reporting zero tasks proves the pipeline works and that nobody hand-edited a
       # translation without re-running the skill.
-      - run: ./i18n/scripts/run.sh plan --root . --lang zh-CN --json
+      - run: ./i18n/scripts/run.sh plan --root . --lang zh-CN --paths 'README.md' --json
       - run: ./i18n/scripts/run.sh verify --root . --lang zh-CN --json
+      # The review passes need a model, so CI only checks that their task files render --
+      # every prompt placeholder substituted, and no source text in a proofreading task.
+      - run: ./i18n/scripts/run.sh review plan --root . --lang zh-CN --mode revision --json
+      - run: ./i18n/scripts/run.sh review plan --root . --lang zh-CN --mode proofread --json

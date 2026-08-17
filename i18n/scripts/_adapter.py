@@ -450,6 +450,141 @@ def match_terms(text: str, terms: list[Term], lang: str, rel: str = "") -> list[
     return hits
 
 
+# --------------------------------------------------------------------------------------
+# style guide
+# --------------------------------------------------------------------------------------
+
+#: The two quotation systems used in CJK technical writing. Mixing them inside one document
+#: is the single most visible style inconsistency, and unlike register it is decidable.
+_QUOTE_SYSTEMS = {
+    "「」": ("「", "」"),
+    "“”": ("“", "”"),
+}
+
+#: A CJK ideograph immediately followed by a Latin letter or digit, or the reverse. Only
+#: meaningful outside code, so callers must pass masked text.
+_CJK_LATIN_RE = re.compile(
+    r"(?:[一-鿿][A-Za-z0-9]|[A-Za-z0-9][一-鿿])"
+)
+
+#: Half-width punctuation sitting between two CJK characters, where the full-width form is
+#: what a native document would use. Bounded on both sides so `foo, bar` in prose about
+#: code is not flagged.
+_HALFWIDTH_PUNCT_RE = re.compile(r"[一-鿿]\s*([,;:!?])\s*[一-鿿]")
+
+#: Rendered into the prompt in this order. The value is the label a translator sees; the
+#: key is the field in style.json. Unknown keys are passed through, so a repository can
+#: state a convention this skill has never heard of and it still reaches the translator.
+_STYLE_LABELS = {
+    "audience": "Audience",
+    "register": "Register",
+    "address": "Address the reader as",
+    "quotes": "Quotation marks",
+    "dash": "Dash",
+    "cjk_latin_space": "Space between CJK and Latin/digits",
+    "headings": "Heading style",
+    "unknown_terms": "Terms absent from the glossary",
+    "locale": "Numbers / dates / units",
+}
+
+_UNKNOWN_TERM_TEXT = {
+    "keep_english": "leave in English",
+    "translate": "translate them",
+    "gloss_on_first_use": "translate, with the English in parentheses on first use",
+}
+
+
+def load_style(path: Path | str | None) -> dict:
+    """Per-language style guide, ``{}`` when absent.
+
+    The glossary fixes individual words. This fixes everything between them -- register,
+    how the reader is addressed, which quotation marks, whether CJK and Latin are spaced.
+    Left unstated, each run picks its own conventions and the translation drifts in style
+    the way it would drift in terminology without a glossary.
+    """
+    if not path:
+        return {}
+    p = Path(path)
+    if not p.exists():
+        return {}
+    data = json.loads(p.read_text(encoding="utf-8"))
+    return {k: v for k, v in data.items() if k != "schema" and isinstance(v, dict)}
+
+
+def style_for(style: dict, lang: str) -> dict:
+    """Conventions for ``lang``, falling back to its base subtag (``zh-CN`` -> ``zh``)."""
+    if not style:
+        return {}
+    if lang in style:
+        return style[lang]
+    return style.get(lang.split("-")[0], {})
+
+
+def style_prompt(style: dict, lang: str) -> str:
+    """Compact instruction block appended to a chunk prompt, next to the glossary block."""
+    rules = style_for(style, lang)
+    if not rules:
+        return ""
+    lines = ["", "STYLE (this repository's conventions for this language):"]
+    for key, label in _STYLE_LABELS.items():
+        if key not in rules:
+            continue
+        val = rules[key]
+        if key == "cjk_latin_space":
+            val = "yes" if val else "no"
+        elif key == "unknown_terms":
+            val = _UNKNOWN_TERM_TEXT.get(val, val)
+        elif isinstance(val, dict):
+            val = ", ".join(f"{k}: {v}" for k, v in val.items())
+        lines.append(f"- {label}: {val}")
+    for key, val in rules.items():
+        if key not in _STYLE_LABELS and isinstance(val, str):
+            lines.append(f"- {key}: {val}")
+    if len(lines) == 2:
+        return ""
+    lines.append("Follow these even where the source does something different -- they are")
+    lines.append("target-language conventions, not properties of the source.")
+    return "\n".join(lines) + "\n"
+
+
+def check_style(target: str, style: dict, lang: str, rel: str = "") -> list[dict]:
+    """The decidable part of the style guide. Everything else is left to a reader.
+
+    Three conventions can be asserted from the text alone; register, tone and audience fit
+    cannot, and are not guessed at here. All findings are ``warn``: a style slip is worth
+    surfacing, never worth refusing to write the file over.
+    """
+    rules = style_for(style, lang)
+    if not rules:
+        return []
+
+    masked, _ = mask_code(target)
+    out = []
+
+    def add(msg, **kw):
+        out.append({"code": "X-STYLE", "severity": "warn", "file": rel, "message": msg, **kw})
+
+    want_quotes = rules.get("quotes")
+    if want_quotes in _QUOTE_SYSTEMS:
+        for name, (open_q, close_q) in _QUOTE_SYSTEMS.items():
+            if name == want_quotes:
+                continue
+            n = masked.count(open_q) + masked.count(close_q)
+            if n:
+                add(f"uses {name} quotation marks {n} time(s); this repository uses "
+                    f"{want_quotes}", expected=want_quotes, actual=name, count=n)
+
+    if rules.get("cjk_latin_space") and (hits := _CJK_LATIN_RE.findall(masked)):
+        add(f"{len(hits)} place(s) where CJK and Latin/digits meet without a space",
+            examples=sorted(set(hits))[:10])
+
+    if is_cjk(lang) and (hits := _HALFWIDTH_PUNCT_RE.findall(masked)):
+        add(f"half-width punctuation between CJK characters {len(hits)} time(s)",
+            examples=sorted(set(hits))[:10])
+
+    return out
+
+
 def glossary_prompt(terms: list[Term], lang: str) -> str:
     """Compact instruction block appended to a chunk prompt."""
     if not terms:

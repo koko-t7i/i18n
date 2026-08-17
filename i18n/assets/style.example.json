@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "zh-CN": {
+    "audience": "开发者，习惯阅读中文技术文档",
+    "register": "简洁、技术、不用营销腔；祈使句直述，不加语气助词",
+    "address": "你",
+    "quotes": "「」",
+    "dash": "——",
+    "cjk_latin_space": true,
+    "headings": "名词短语，不用动宾结构",
+    "unknown_terms": "keep_english",
+    "locale": {
+      "numbers": "保持原文格式",
+      "dates": "保持原文格式",
+      "units": "保持原文单位，不做换算"
+    }
+  },
+  "ja": {
+    "audience": "技術文書を読み慣れた開発者",
+    "register": "です・ます調、簡潔に",
+    "quotes": "「」",
+    "cjk_latin_space": true,
+    "unknown_terms": "keep_english"
+  }
+}

@@ -203,6 +203,7 @@ def cmd_plan(args) -> int:
     state = State.load(root, state_dir)
     cache = state.chunk_cache(args.file, args.lang) if not args.all else {}
     terms = A.load_glossary(state_dir / "glossary.json")
+    style = A.load_style(state_dir / "style.json")
 
     todo = {k: v for k, v in pairs.items() if sha(v) not in cache}
     run_id = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
@@ -228,6 +229,7 @@ def cmd_plan(args) -> int:
                 "- Preserve escape sequences (\\n, \\t) and their count.\n"
                 "- Translate only human-readable text."
                 + A.glossary_prompt(hits, args.lang)
+                + A.style_prompt(style, args.lang)
             ),
             "result_path": f"{rel_state_dir(root, state_dir)}/work/{run_id}/results/{task_id}.json",
         }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -279,7 +281,7 @@ def cmd_apply(args) -> int:
     tgt = root / plan["target"]
     out = write_resource(tgt, structure, values, fmt)
     state.record(plan["file"], plan["lang"], plan["target"], sha(src_path.read_text("utf-8")),
-                 out, {sha(v): values[k] for k, v in pairs.items()})
+                 out, {sha(v): {"src": v, "tgt": values[k]} for k, v in pairs.items()})
     state.save()
     print(f"  wrote {plan['target']}  ({len(values)} keys)")
     return 0

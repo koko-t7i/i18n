@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "zh-CN": {
+    "audience": "开发者，习惯阅读中文技术文档，能直接读英文术语",
+    "register": "简洁、技术、克制；陈述句直述，不用营销腔，不加语气助词，不用感叹号",
+    "address": "你",
+    "quotes": "「」",
+    "dash": "——",
+    "cjk_latin_space": true,
+    "headings": "与英文标题保持同样的信息量，不扩写、不加副标题",
+    "unknown_terms": "keep_english",
+    "locale": {
+      "numbers": "保持原文格式",
+      "dates": "保持原文格式",
+      "units": "保持原文单位，不做换算"
+    }
+  }
+}

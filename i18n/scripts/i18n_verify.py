@@ -30,7 +30,7 @@ def _split_links(urls: list[str]) -> tuple[list[str], int]:
 
 
 def verify_pair(src_text: str, tgt_text: str, lang: str, rel: str, terms: list,
-                target_abs: Path | None = None) -> list[dict]:
+                target_abs: Path | None = None, style: dict | None = None) -> list[dict]:
     s = A.inventory(src_text)
     t = A.inventory(tgt_text)
     f: list[dict] = []
@@ -104,6 +104,7 @@ def verify_pair(src_text: str, tgt_text: str, lang: str, rel: str, terms: list,
                 f"relative link {url!r} does not resolve from the translation")
 
     f.extend({**g, "file": rel} for g in A.check_glossary(src_text, tgt_text, terms, lang, rel))
+    f.extend(A.check_style(tgt_text, style or {}, lang, rel))
     return f
 
 
@@ -133,6 +134,8 @@ def main() -> int:
     ap.add_argument("--lang", required=True)
     ap.add_argument("--files", nargs="*", default=None, help="limit to these source paths")
     ap.add_argument("--glossary", default=None)
+    ap.add_argument("--style", default=None,
+                    help="path to style.json (default <state-dir>/style.json)")
     add_state_dir_arg(ap)
     ap.add_argument("--strict", action="store_true", help="treat warnings as blocking")
     ap.add_argument("--json", action="store_true")
@@ -143,6 +146,7 @@ def main() -> int:
     state = State.load(root, state_dir)
     gpath = Path(args.glossary) if args.glossary else state_dir / "glossary.json"
     terms = A.load_glossary(gpath)
+    style = A.load_style(Path(args.style) if args.style else state_dir / "style.json")
 
     pairs = []
     for rel, langs in sorted(state.data.get("files", {}).items()):
@@ -172,7 +176,7 @@ def main() -> int:
             continue
         findings.extend(verify_pair(
             src.read_text(encoding="utf-8"), tgt.read_text(encoding="utf-8"),
-            args.lang, rel, terms, target_abs=tgt,
+            args.lang, rel, terms, target_abs=tgt, style=style,
         ))
         checked += 1
 

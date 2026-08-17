@@ -92,6 +92,33 @@ chunk id means reuse survives re-chunking — a chunk that keeps its text but mo
 were produced by a splitter that may never emit that text again, so the whole file is
 re-translated once. That is deliberate and visible in the plan output as `stale`.
 
+## The fuzzy tier
+
+An exact hash miss is not the end. `State.fuzzy_match` compares the new chunk against every
+previously translated chunk of the same file with `difflib.SequenceMatcher`, and above
+`FUZZY_THRESHOLD` (0.6) the task file gains `previous_translation`, `previous_source` and
+`match_ratio`, plus `"mode": "revise"`. The subagent then edits rather than retranslates —
+see `assets/prompts/revise_markdown.md`.
+
+This is what a CAT tool calls a fuzzy match, and it exists for one reason: chunks here are
+whole sections, so a one-word source change otherwise re-words a whole page of settled
+prose. The threshold sits below the 70–75% CAT convention because a section-sized chunk
+moves its ratio less than a sentence does for the same edit.
+
+`plan --json` reports `fuzzy_matched`. `--all` and `--repair` suppress it: both mean
+"ignore what we had", so anchoring to the old translation would defeat them.
+
+### Schema 2
+
+Fuzzy matching needs the old *source*, so `chunks` maps a hash to `{"src", "tgt"}` rather
+than to a bare string. Schema 1 files are still read — their entries simply have no fuzzy
+capability until each file is next translated. **Nothing is discarded on upgrade**; doing so
+would re-translate every repository that has ever used this skill. Both shapes coexist in
+one `state.json` while a repo migrates file by file.
+
+The cost is file size: `state.json` now holds both sides of every chunk. That is what a
+translation memory is.
+
 **Honest limitation:** chunking uses a character budget with a preference for breaking at
 H1/H2, so a document under the budget is a single `body:1` chunk. Editing one word in such a
 file re-translates the whole body. The cache pays off on long documents and on repeated runs
@@ -121,7 +148,8 @@ top level. Three contents, whichever directory is picked:
 |---|---|---|
 | `<state-dir>/state.json` | **yes** | translation lockfile: source hashes + chunk cache |
 | `<state-dir>/glossary.json` | **yes** | terminology, if used |
-| `<state-dir>/work/<run_id>/` | no | `plan.json`, `jobs/`, `tasks/`, `results/` — disposable |
+| `<state-dir>/style.json` | **yes** | style conventions, if used — see `style.md` |
+| `<state-dir>/work/<run_id>/` | no | `plan.json`, `jobs/`, `tasks/`, `results/`, `review/` — disposable |
 
 `resolve_state_dir` in `_paths.py` picks it, in this order:
 

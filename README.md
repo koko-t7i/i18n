@@ -66,10 +66,52 @@ Every translation is compared against its source before it is accepted. These fa
 | `X-GLOSSARY` | required terms present, forbidden renderings absent |
 | `X-CHATTER` | no "here is the translation" preamble |
 
-Warnings only: `X-DEADLINK`, `X-ANCHOR`, `X-UNTRANSLATED`, `X-ORPHAN`.
+Warnings only: `X-DEADLINK`, `X-ANCHOR`, `X-UNTRANSLATED`, `X-ORPHAN`, `X-STYLE`.
 
 On failure only the offending chunk is retried, with the finding attached. After two rounds
 it stops and names the file that needs a human.
+
+Every check above compares *structure*. None of them can tell you the translation is fluent
+and wrong — for that there are two more passes, below.
+
+## Revision and proofreading
+
+Structure checks catch a mangled code fence. They cannot catch a paragraph that reads
+perfectly and says the opposite of the source. Professional practice splits that into two
+jobs, and this follows it:
+
+| Pass | Sees | Judges | Blocks? |
+|---|---|---|---|
+| **revision** | source **and** translation | accuracy, terminology, audience fit | yes |
+| **proofread** | **translation only** | fluency, style, locale | no |
+
+The proofreader is not shown the source, and that is the method rather than an oversight: a
+sentence that maps neatly onto its source reads as correct even when no native writer would
+phrase it that way. Only someone who cannot see the original notices.
+
+Each pass costs one extra model call per file, so it is a choice — translation memory and
+the style guide below cost nothing and are always on.
+
+```bash
+run.sh review plan    --root . --lang zh-CN --mode revision
+run.sh review collect --root . --run <run_id>
+```
+
+Findings come back in the localisation industry's MQM error typology and feed the existing
+repair loop. See [`i18n/references/review.md`](i18n/references/review.md).
+
+## Terminology and style
+
+Two optional files, both committed, both living beside the state:
+
+| File | Fixes |
+|---|---|
+| `<state-dir>/glossary.json` | individual words — required renderings, forbidden ones, terms to leave in English |
+| `<state-dir>/style.json` | everything between them — register, audience, how the reader is addressed, quotation marks, CJK/Latin spacing, what to do with terms the glossary does not list |
+
+Without a glossary, terminology drifts between runs. Without a style file, so does the
+prose. Three of the style conventions are machine-checked as `X-STYLE`; the rest reach the
+translator, the reviser and the proofreader as one shared definition.
 
 > [!NOTE]
 > **Anchors from another file are not rewritten.** Translating `## Getting Started` moves its
@@ -85,8 +127,9 @@ for Codex.
 
 | Path | Commit? | Purpose |
 |---|---|---|
-| `<state-dir>/state.json` | **yes** | translation lockfile: source hashes and the chunk cache |
+| `<state-dir>/state.json` | **yes** | translation lockfile: source hashes, plus both sides of every chunk |
 | `<state-dir>/glossary.json` | **yes** | terminology, if you use one |
+| `<state-dir>/style.json` | **yes** | style conventions, if you use them |
 | `<state-dir>/work/` | no | per-run scratch — gitignore it |
 
 A repo that already has one keeps it, whichever agent you open it with — two lockfiles cannot
@@ -123,15 +166,21 @@ silently reformats all three.
 detected rather than imposed, and relative links are rewritten to match wherever the
 translation lands.
 
-### Chunking and the cache
+### Chunking, the cache, and translation memory
 
 Documents split on a character budget, preferring H1/H2 boundaries, and each chunk is cached
 under the hash of its source. Unchanged files are skipped entirely.
 
-Within a file the cache is only as fine as the chunks, so a single-chunk document is
-retranslated whole when one word changes, while a long one reuses every section you did not
-touch. The cache pays off on long documents and repeated runs across many files — not on
-small edits to short ones.
+Within a file the cache is only as fine as the chunks, so a single-chunk document has no
+exact hit once one word changes. That is where the second tier comes in: the state file
+stores each chunk's **source** next to its translation, so a changed chunk is matched
+against the nearest previous one and handed to the translator as an **edit** — old
+translation, old source, similarity ratio — rather than a blank page. Sentences whose source
+did not change come through untouched.
+
+Without it, a one-word fix re-words the entire page and every reviewer has to re-read a
+translation that did not need to change. Measured on this repository's own README: 54
+insertions and 44 deletions without the previous translation, 19 and 9 with it.
 
 ## Development
 

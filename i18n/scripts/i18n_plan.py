@@ -50,6 +50,8 @@ def main() -> int:
     ap.add_argument("--force", action="store_true", help="overwrite human-edited translations")
     ap.add_argument("--glossary", default=None,
                     help="path to glossary.json (default <state-dir>/glossary.json)")
+    ap.add_argument("--style", default=None,
+                    help="path to style.json (default <state-dir>/style.json)")
     add_state_dir_arg(ap)
     ap.add_argument("--max-tasks", type=int, default=40)
     ap.add_argument("--repair", default=None,
@@ -110,6 +112,7 @@ def main() -> int:
     state = State.load(root, state_dir)
     glossary_path = Path(args.glossary) if args.glossary else state_dir / "glossary.json"
     terms = A.load_glossary(glossary_path)
+    style = A.load_style(Path(args.style) if args.style else state_dir / "style.json")
 
     run_id = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
     work = state_dir / "work" / run_id
@@ -119,6 +122,7 @@ def main() -> int:
 
     files_out, conflicts, tasks_written = [], [], 0
     skipped_by_cap = 0
+    fuzzy_matched = 0
 
     for rel in sources:
         abs_src = root / rel
@@ -166,11 +170,25 @@ def main() -> int:
                 "kind": ch.get("kind"),
                 "source_sha": csha,
                 "source": ch["source"],
-                "prompt": ch["prompt"] + A.glossary_prompt(hits, args.lang),
+                "prompt": (ch["prompt"] + A.glossary_prompt(hits, args.lang)
+                           + A.style_prompt(style, args.lang)),
                 "instructions": ch.get("instructions", ""),
                 "result_path":
                     f"{rel_state_dir(root, state_dir)}/work/{run_id}/results/{task_id}.json",
             }
+
+            # Translation memory: when a near-identical chunk was translated before, hand
+            # over that translation and its source so this becomes an edit. Without it the
+            # subagent rewrites settled prose whenever one word of the source changed.
+            if not fresh:
+                match = state.fuzzy_match(ch["source"], rel, args.lang, _job.CHUNKER_VERSION)
+                if match:
+                    prev, ratio = match
+                    payload["previous_source"] = prev["src"]
+                    payload["previous_translation"] = prev["tgt"]
+                    payload["match_ratio"] = round(ratio, 3)
+                    payload["mode"] = "revise"
+                    fuzzy_matched += 1
             (work / "tasks" / f"{task_id}.json").write_text(
                 json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
             )
@@ -200,9 +218,11 @@ def main() -> int:
         "layout": layout.to_dict(),
         "glossary": str(glossary_path) if terms else None,
         "glossary_terms": len(terms),
+        "style": sorted(style) or None,
         "work_dir": f"{rel_state_dir(root, state_dir)}/work/{run_id}",
         "files": files_out,
         "task_count": tasks_written,
+        "fuzzy_matched": fuzzy_matched,
         "conflicts": conflicts,
         "truncated_tasks": skipped_by_cap,
     }
@@ -218,7 +238,8 @@ def main() -> int:
         for f in files_out:
             print(f"  {f['status']:11s} {f['file']} -> {f['target']}"
                   f"  tasks={f.get('tasks', 0)} reused={f.get('reused', 0)}")
-        print(f"  {tasks_written} task(s) in {plan['work_dir']}/tasks/")
+        extra = f", {fuzzy_matched} with a previous translation to edit" if fuzzy_matched else ""
+        print(f"  {tasks_written} task(s) in {plan['work_dir']}/tasks/{extra}")
         if skipped_by_cap:
             print(f"  WARNING: {skipped_by_cap} chunk(s) dropped by --max-tasks {args.max_tasks}")
         for c in conflicts:

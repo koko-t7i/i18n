@@ -132,7 +132,12 @@ def main() -> int:
             out_path = root / tgt_rel
             out_path.parent.mkdir(parents=True, exist_ok=True)
             out_path.write_text(content, encoding="utf-8")
-            cache = {sha(ch["source"]): chunks[ch["id"]] for ch in blob["job"]["chunks"]}
+            # Both sides are stored: the translation for exact reuse, the source so a
+            # later run can fuzzy-match a chunk that changed by a few words.
+            cache = {
+                sha(ch["source"]): {"src": ch["source"], "tgt": chunks[ch["id"]]}
+                for ch in blob["job"]["chunks"]
+            }
             state.record(rel, lang, tgt_rel, blob["source_sha"], content, cache,
                          chunker=_job.CHUNKER_VERSION)
         written.append(rec)

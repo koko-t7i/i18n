@@ -193,7 +193,8 @@ class TestStateUsesGivenDir(HarnessEnvCase):
     def test_save_and_reload_roundtrip(self):
         d = P.resolve_state_dir(self.root)
         s = State.load(self.root, d)
-        s.record("README.md", "zh-CN", "README.zh-CN.md", "srcsha", "译文", {"c1": "块"})
+        s.record("README.md", "zh-CN", "README.zh-CN.md", "srcsha", "译文",
+                 {"c1": {"src": "block", "tgt": "块"}})
         path = s.save()
         self.assertEqual(path, self.root / ".claude" / "i18n" / "state.json")
         again = State.load(self.root, d)
