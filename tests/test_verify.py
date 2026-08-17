@@ -5,8 +5,8 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "i18n" / "scripts"))
-import _adapter as A  # noqa: E402
-from i18n_verify import verify_pair  # noqa: E402
+import _adapter as A
+from i18n_verify import verify_pair
 
 SRC = """---
 title: Demo
@@ -134,7 +134,9 @@ class TestGlossary(unittest.TestCase):
         self.assertTrue(any(x["severity"] == "error" for x in f))
 
     def test_correct_translation_passes(self):
-        self.assertEqual(A.check_glossary("A skill here.", "这里有一个技能。", self.terms(), "zh-CN"), [])
+        self.assertEqual(
+            A.check_glossary("A skill here.", "这里有一个技能。", self.terms(), "zh-CN"), []
+        )
 
     def test_forbidden_rendering_warns(self):
         f = A.check_glossary("A skill here.", "这里有一个技能，也叫技巧。", self.terms(), "zh-CN")

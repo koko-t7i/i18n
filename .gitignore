@@ -2,6 +2,11 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+.ruff_cache/
+.pytest_cache/
+# The project declares no dependencies -- run.sh supplies them per-run with `uv --with`.
+# The lock uv writes is therefore empty and carries no information.
+uv.lock
 .claude/i18n/work/
 .codex/i18n/work/
 .DS_Store

@@ -2,11 +2,31 @@
 
 **让译文与原文保持同步，不再悄无声息地腐烂。**
 
+[![CI](https://github.com/koko-t7i/i18n/actions/workflows/ci.yml/badge.svg)](https://github.com/koko-t7i/i18n/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue.svg)](pyproject.toml)
+
 [English](README.md)
 
 一个面向 [Claude Code](https://claude.com/claude-code) 与
 [Codex](https://developers.openai.com/codex) 的 agent 技能。子代理负责写译文；脚本负责
 一切不能交给模型的事。不需要翻译 API，也不需要任何 API 密钥。
+
+## 快速开始
+
+```bash
+git clone git@github.com:koko-t7i/i18n.git ~/icode/skills/i18n
+ln -s ~/icode/skills/i18n/i18n ~/.claude/skills/i18n     # Claude Code
+ln -s ~/icode/skills/i18n/i18n ~/.codex/skills/i18n      # Codex
+```
+
+一个目录，两个 harness —— 你用哪个就链接哪个，也可以两个都链。需要 `PATH` 中有
+[`uv`](https://docs.astral.sh/uv/)；它会按次提供 Python 3.13 与那两个依赖，不做任何全局安装。
+
+然后直接提出需求即可 —— *把 README 和 docs 翻译成中文*、*sync the Japanese docs*、
+*检查译文是否还与原文一致*、*把安装指南整篇重新翻译一遍*。
+
+之后再提，未变动的文件会被跳过。你手工改过的译文会被识别出来，未经你许可绝不覆盖。
 
 ## 为什么不直接让模型翻译这个文件？
 
@@ -17,27 +37,6 @@
 | **漂移** | 你在 `README.md` 里改了个错别字；译文描述的还是上个月的行为 | 内容哈希 |
 | **结构损坏** | 反引号里的参数名被翻译，或 `{count}` 变成 `{数量}` —— 文档看着正常，复制走的命令却坏了 | 校验器 |
 | **术语漂移** | 「skill」在这一段是 技能，三段之后又成了 技巧 | 术语表的 `forbid` 列表 |
-
-## 安装
-
-```bash
-git clone git@github.com:koko-t7i/i18n.git ~/icode/skills/i18n
-ln -s ~/icode/skills/i18n/i18n ~/.claude/skills/i18n     # Claude Code
-ln -s ~/icode/skills/i18n/i18n ~/.codex/skills/i18n      # Codex
-```
-
-一个目录，两个 harness —— 你用哪个就链接哪个，也可以两个都链。
-
-需要 `PATH` 中有 [`uv`](https://docs.astral.sh/uv/)；它会按次提供 `markdown-it-py` 和 `pyyaml`，
-不做任何全局安装。没有 `uv` 时会回落到系统 `python3`，此时缺 `markdown-it-py` 会让围栏识别
-降级为正则扫描，缺 `pyyaml` 则会让 YAML 资源路径停下。
-
-## 使用
-
-直接提出需求即可 —— *把 README 和 docs 翻译成中文*、*sync the Japanese docs*、
-*检查译文是否还与原文一致*、*把安装指南整篇重新翻译一遍*。
-
-之后再提，未变动的文件会被跳过。你手工改过的译文会被识别出来，未经你许可绝不覆盖。
 
 ## 覆盖范围
 
@@ -96,30 +95,42 @@ Docusaurus 请改为翻译 `i18n/<locale>/**.json` —— 那属于资源文件�
 
 ## 工作原理
 
-**代码块在任何模型看到文本之前就已变成 `@@CODE_BLOCK_n@@` 标记**，并在重组时还原，
-因此子代理无法破坏代码块本身 —— 只能破坏那个标记，而这是会被检查的。
-核心不变式是：**把每个分块原样送回，必须逐字节复现原文**；测试在真实文档、
-引用块与列表项内的嵌套围栏，以及一个 4000 词的段落上都断言了这一点。
-当标记被删除、篡改或重复，或分块缺失、重复时，重组会拒绝写出已损坏的文件。
+### 子代理无法破坏代码块
 
-frontmatter 是**就地编辑而非重新序列化** —— 原始块被保留、标量值按行替换，
-因此注释、键顺序与引号风格全部存活。布局沿用你仓库既有的约定
-（`README.zh-CN.md`、`docs/zh-CN/`、`README_CN.md` 等）而非强加一种，并重写相对链接以保持一致。
+**代码块在任何模型看到文本之前就已变成 `@@CODE_BLOCK_n@@` 标记**，并在重组时还原。
+送到翻译者手里的是那个标记，而这是会被检查的。
 
-文档按字符预算切分、优先在 H1/H2 处断开，每个分块以其源文本的哈希为键缓存。
-未变动的文件会被整体跳过；在单个文件内部，缓存的精细程度取决于分块 ——
-只有一个分块的文档改动一个词就会整篇重译，而长文档会复用你没有动过的每一节。
+核心不变式是：**把每个分块原样送回，必须逐字节复现原文**。测试在真实文档、引用块
+与列表项内的嵌套围栏，以及一个 4000 词的段落上都断言了这一点。当标记被删除、篡改
+或重复，或分块缺失、重复时，重组会拒绝写出已损坏的文件。
+
+### frontmatter 是就地编辑而非重新序列化
+
+原始块被保留、标量值按行替换，因此注释、键顺序与引号风格全部存活。经 YAML dumper
+往返一圈 —— 最显而易见的那种实现 —— 会悄无声息地把这三样全部重排格式。
+
+### 布局沿用你的仓库
+
+`README.zh-CN.md`、`docs/zh-CN/`、`README_CN.md` …… —— 仓库里既有的约定是被检测出来的
+而非强加的，并重写相对链接以匹配译文最终落到的位置。
+
+### 分块与缓存
+
+文档按字符预算切分、优先在 H1/H2 处断开，每个分块以其源文本的哈希为键缓存。未变动的
+文件会被整体跳过。
+
+在单个文件内部，缓存的精细程度取决于分块 —— 只有一个分块的文档改动一个词就会整篇重译，
+而长文档会复用你没有动过的每一节。缓存的收益体现在长文档以及跨多个文件的重复运行上 ——
+而不是短文档上的小改动。
 
 ## 开发
 
-```bash
-python3 -m unittest discover tests -v                              # bare stdlib
-uv run --with markdown-it-py --with pyyaml python -m unittest discover tests
-```
+参见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
-两种方式都要跑：在裸 `python3` 上，四个需要容器内嵌套围栏的测试会自行跳过。
-改变分块边界意味着要提升 `i18n/scripts/_job.py` 里的 `CHUNKER_VERSION`，
-这会让所有已缓存的分块译文失效。
+```bash
+uv run --with ruff ruff check .
+python3 -m unittest discover tests -v
+```
 
 ## 许可
 

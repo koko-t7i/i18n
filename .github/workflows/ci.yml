@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+      - run: uv run --with ruff ruff check .
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The README promises both paths work. Run both, so that stays true: with the
+        # dependencies present, and on a bare interpreter where the four tests that need
+        # container-nested fence parsing skip themselves.
+        include:
+          - name: uv
+            run: uv run --python 3.13 --with markdown-it-py --with pyyaml python -m unittest discover tests -v
+          - name: stdlib
+            run: uv run --python 3.13 --no-project python -m unittest discover tests -v
+    name: test (${{ matrix.name }})
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+      - run: ${{ matrix.run }}
+
+  skill:
+    name: skill runs end to end
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+      # The repo translates its own README, so its state is committed and current. A plan
+      # reporting zero tasks proves the pipeline works and that nobody hand-edited a
+      # translation without re-running the skill.
+      - run: ./i18n/scripts/run.sh plan --root . --lang zh-CN --json
+      - run: ./i18n/scripts/run.sh verify --root . --lang zh-CN --json

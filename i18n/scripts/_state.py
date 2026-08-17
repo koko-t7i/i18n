@@ -10,13 +10,12 @@ Keying on the source hash rather than the chunk id also makes reuse survive re-c
 if a chunk keeps its text but moves from ``body:2`` to ``body:3``, it still hits.
 """
 
-from __future__ import annotations
-
 import hashlib
 import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Self
 
 SCHEMA = 1
 
@@ -39,7 +38,7 @@ class State:
 
     # ---------------------------------------------------------------- construction
     @classmethod
-    def load(cls, root: Path, state_dir: Path) -> "State":
+    def load(cls, root: Path, state_dir: Path) -> Self:
         root, state_dir = Path(root), Path(state_dir)
         p = state_dir / "state.json"
         if p.exists():

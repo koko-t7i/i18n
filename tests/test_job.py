@@ -10,8 +10,8 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "i18n" / "scripts"))
-import _job  # noqa: E402
-import _md  # noqa: E402
+import _job
+import _md
 
 needs_parser = unittest.skipUnless(
     _md.using_parser(), "markdown-it-py not installed; run through run.sh"

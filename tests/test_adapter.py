@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "i18n" / "scripts"))
-import _adapter as A  # noqa: E402
+import _adapter as A
 
 
 def build(tree: dict) -> Path:

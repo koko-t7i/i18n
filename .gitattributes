@@ -1,0 +1,13 @@
+* text=auto eol=lf
+
+*.py   text eol=lf
+*.sh   text eol=lf
+*.md   text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.yml  text eol=lf
+
+# Machine-written lockfiles. Tracked on purpose (see the README), but they are not source:
+# keep them out of the language stats and collapsed in diffs.
+.claude/i18n/state.json    linguist-generated=true
+.claude/i18n/glossary.json linguist-generated=true

@@ -16,15 +16,13 @@ Three deliberate departures from the code this replaces:
   line by line and leave every other byte alone.
 """
 
-from __future__ import annotations
-
 import re
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import _md  # noqa: E402
+import _md
 
 #: Bump when chunk boundaries change. Cached chunk translations from an older chunker are
 #: keyed on source text that this one may no longer produce, so they must be discarded.
@@ -60,7 +58,9 @@ _INSTRUCTIONS = (
     "for this chunk, preserving placeholders and Markdown structure exactly."
 )
 
-_PROMPT_PATH = Path(__file__).resolve().parent.parent / "assets" / "prompts" / "translate_markdown.md"
+_PROMPT_PATH = (
+    Path(__file__).resolve().parent.parent / "assets" / "prompts" / "translate_markdown.md"
+)
 
 
 # --------------------------------------------------------------------------------------

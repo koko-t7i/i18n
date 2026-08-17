@@ -9,8 +9,6 @@ blockquote (``> ```bash``) or inside a list item is a `fence` token to markdown-
 regex sees the ``> `` prefix and mis-slices the block. Prefer the real parser.
 """
 
-from __future__ import annotations
-
 import re
 import sys
 import unicodedata
@@ -111,7 +109,9 @@ def fence_spans(text: str) -> list[tuple[int, int]]:
 _INLINE_CODE_RE = re.compile(r"(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)", re.DOTALL)
 
 
-def inline_code_spans(text: str, skip: list[tuple[int, int]] | None = None) -> list[tuple[int, int]]:
+def inline_code_spans(
+    text: str, skip: list[tuple[int, int]] | None = None
+) -> list[tuple[int, int]]:
     """Character spans of inline code, excluding anything inside ``skip`` (usually fences).
 
     Regex rather than AST on purpose: markdown-it's ``code_inline`` tokens carry no character
@@ -297,7 +297,8 @@ def apply_frontmatter_fields(raw_block: str, values: dict[str, str]) -> str:
             q = orig[0]
             new = f"{q}{new.replace(q, chr(92) + q)}{q}"
         elif _needs_quoting(new):
-            new = '"%s"' % new.replace('"', '\\"')
+            escaped = new.replace('"', '\\"')
+            new = f'"{escaped}"'
         nl = line[len(stripped):]
         out.append(f"{m.group('key')}{m.group('sep')}{new}{nl}")
     return "".join(out)
@@ -324,9 +325,9 @@ def normalize_internal_anchors(source: str, translated: str) -> str:
     """
     src_slugs = [s for _, _, s in headings(source)]
     tgt_slugs = [s for _, _, s in headings(translated)]
-    mapping = {
-        s: t for s, t in zip(src_slugs, tgt_slugs) if s != t
-    }
+    # strict=False on purpose: a heading-count mismatch is what X-HEADING exists to report,
+    # and anchor rewriting must not be the thing that crashes on it. Pair what we can.
+    mapping = {s: t for s, t in zip(src_slugs, tgt_slugs, strict=False) if s != t}
     if not mapping:
         return translated
 

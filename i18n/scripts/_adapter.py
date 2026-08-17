@@ -8,8 +8,6 @@ Repository-level policy, as opposed to the Markdown mechanics in ``_md`` and ``_
 * the structural inventories the verifier compares between source and target
 """
 
-from __future__ import annotations
-
 import fnmatch
 import json
 import re
@@ -19,7 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import _md  # noqa: E402
+import _md
 
 # --------------------------------------------------------------------------------------
 # language codes
@@ -315,7 +313,9 @@ def rewrite_links(content: str, src_rel: str, tgt_rel: str, layout: Layout, root
 # structural inventories (used by the verifier)
 # --------------------------------------------------------------------------------------
 
-COOP_PLACEHOLDER_RE = re.compile(r"@@(?:CODE_BLOCK|INLINE_CODE|LINE|COOP_CHUNK_START|COOP_CHUNK_END)[^@]*@@")
+COOP_PLACEHOLDER_RE = re.compile(
+    r"@@(?:CODE_BLOCK|INLINE_CODE|LINE|COOP_CHUNK_START|COOP_CHUNK_END)[^@]*@@"
+)
 USER_TOKEN_RE = re.compile(
     r"\{\{[^{}\n]+\}\}"          # {{var}}
     r"|\{[A-Za-z_][\w.]*\}"      # {count}
@@ -347,7 +347,9 @@ def inventory(text: str) -> dict:
         # inside backticks, and that is not a failed restoration.
         "coop_placeholders": sorted(COOP_PLACEHOLDER_RE.findall(masked)),
         "tokens": sorted(USER_TOKEN_RE.findall(masked)),
-        "html_tags": sorted(f"{'/' if c else ''}{n.lower()}" for c, n in _HTML_TAG_RE.findall(masked)),
+        "html_tags": sorted(
+            f"{'/' if c else ''}{n.lower()}" for c, n in _HTML_TAG_RE.findall(masked)
+        ),
         "fence_infos": [i for i, _ in fences],
         "fence_bodies": [b for _, b in fences],
         "fence_count": len(fences),
@@ -471,17 +473,23 @@ def glossary_prompt(terms: list[Term], lang: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def check_glossary(source: str, target: str, terms: list[Term], lang: str, rel: str = "") -> list[dict]:
+def check_glossary(
+    source: str, target: str, terms: list[Term], lang: str, rel: str = ""
+) -> list[dict]:
     """Glossary violations for one translated document."""
     hits = match_terms(source, terms, lang, rel)
     tgt_masked, _ = mask_code(target)
     findings = []
     for t in hits:
         if t.policy == "do_not_translate":
-            if not any(_term_pattern(f, t.case_sensitive).search(tgt_masked) for f in t.surface_forms()):
+            if not any(
+                _term_pattern(f, t.case_sensitive).search(tgt_masked) for f in t.surface_forms()
+            ):
                 findings.append({
                     "code": "X-GLOSSARY", "severity": t.severity, "term": t.source,
-                    "message": f"do-not-translate term {t.source!r} is missing from the translation",
+                    "message": (
+                        f"do-not-translate term {t.source!r} is missing from the translation"
+                    ),
                 })
             continue
         want = t.target_text(lang)

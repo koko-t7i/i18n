@@ -8,8 +8,12 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "i18n" / "scripts"))
-from i18n_resource import (  # noqa: E402
-    flatten, read_resource, unflatten_into, verify_resource, write_resource,
+from i18n_resource import (
+    flatten,
+    read_resource,
+    unflatten_into,
+    verify_resource,
+    write_resource,
 )
 
 SRC = {

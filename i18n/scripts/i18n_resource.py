@@ -12,8 +12,6 @@ preservation. So this path needs no Markdown parsing at all.
 Exit codes: 0 ok | 1 blocking findings | 2 error
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import re
@@ -23,11 +21,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import _adapter as A  # noqa: E402
-from _paths import (  # noqa: E402
-    add_state_dir_arg, rel_state_dir, resolve_state_dir, run_main, warn_if_ignored,
+import _adapter as A
+from _paths import (
+    add_state_dir_arg,
+    rel_state_dir,
+    resolve_state_dir,
+    run_main,
+    warn_if_ignored,
 )
-from _state import State, sha  # noqa: E402
+from _state import State, sha
 
 BATCH_KEYS = 60
 
@@ -96,7 +98,7 @@ def read_resource(path: Path) -> tuple[object, dict[str, str], str]:
                 "error: YAML support needs pyyaml, which run.sh supplies via uv. Install uv, "
                 "or `pip install pyyaml`. Refusing to hand-parse YAML -- a wrong guess "
                 "silently corrupts a config file."
-            )
+            ) from None
         data = yaml.safe_load(raw)
         return data, flatten(data), fmt
     raise SystemExit(f"error: unsupported resource format: {path.suffix}")

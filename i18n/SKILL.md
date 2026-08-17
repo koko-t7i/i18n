@@ -110,6 +110,7 @@ ln -s <repo>/i18n ~/.claude/skills/i18n     # Claude Code
 ln -s <repo>/i18n ~/.codex/skills/i18n      # Codex
 ```
 
-`run.sh` runs each script through `uv`, which provides the dependencies per-run and installs
-nothing globally. Without `uv` it falls back to the system `python3`, which works only as far
-as that interpreter's libraries allow — see `references/workflow.md`.
+`run.sh` runs each script through `uv`, which pins Python 3.13 and provides the dependencies
+per-run, installing nothing globally. Without `uv` it falls back to the system `python3`,
+refusing anything older than 3.13 and working only as far as that interpreter's libraries
+allow — see `references/workflow.md`.

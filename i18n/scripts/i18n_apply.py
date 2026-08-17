@@ -10,8 +10,6 @@ This is the only script that writes into the repository.
 Exit codes: 0 all files written | 1 one or more files rejected | 2 error
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import sys
@@ -19,10 +17,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import _adapter as A  # noqa: E402
-import _job  # noqa: E402
-from _paths import add_state_dir_arg, resolve_state_dir, run_main  # noqa: E402
-from _state import State, sha  # noqa: E402
+import _adapter as A
+import _job
+from _paths import add_state_dir_arg, resolve_state_dir, run_main
+from _state import State, sha
 
 
 def collect_chunks(job_blob: dict, results_dir: Path) -> tuple[dict[str, str], list[str]]:

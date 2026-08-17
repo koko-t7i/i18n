@@ -12,8 +12,6 @@ This script never writes into the repository itself -- that is ``i18n_apply.py``
 Exit codes: 0 planned (possibly zero tasks) | 1 conflicts need a decision | 2 error
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import re
@@ -23,13 +21,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import _adapter as A  # noqa: E402
-import _job  # noqa: E402
-from _paths import (  # noqa: E402
-    add_state_dir_arg, rel_state_dir, resolve_state_dir, run_main, warn_if_ignored,
+import _adapter as A
+import _job
+from _paths import (
+    add_state_dir_arg,
+    rel_state_dir,
+    resolve_state_dir,
+    run_main,
+    warn_if_ignored,
 )
-from _state import State, sha  # noqa: E402
-
+from _state import State, sha
 
 
 def slugify_path(rel: str, lang: str) -> str:
@@ -47,10 +48,12 @@ def main() -> int:
     ap.add_argument("--detect-layout-only", action="store_true")
     ap.add_argument("--all", action="store_true", help="ignore the cache; re-translate everything")
     ap.add_argument("--force", action="store_true", help="overwrite human-edited translations")
-    ap.add_argument("--glossary", default=None, help="path to glossary.json (default <state-dir>/glossary.json)")
+    ap.add_argument("--glossary", default=None,
+                    help="path to glossary.json (default <state-dir>/glossary.json)")
     add_state_dir_arg(ap)
     ap.add_argument("--max-tasks", type=int, default=40)
-    ap.add_argument("--repair", default=None, help="verify.json whose failures should be re-planned")
+    ap.add_argument("--repair", default=None,
+                    help="verify.json whose failures should be re-planned")
     ap.add_argument("--json", action="store_true", help="emit plan.json on stdout")
     args = ap.parse_args()
 
@@ -88,7 +91,7 @@ def main() -> int:
         rep = json.loads(Path(args.repair).read_text(encoding="utf-8"))
         repair_files = {f["file"] for f in rep.get("findings", []) if f.get("severity") == "error"}
         if not repair_files:
-            sys.stderr.write("nothing to repair: no blocking findings in %s\n" % args.repair)
+            sys.stderr.write(f"nothing to repair: no blocking findings in {args.repair}\n")
             return 0
 
     sources: list[str] = []
@@ -135,7 +138,8 @@ def main() -> int:
             continue
 
         job = _job.start_job(text, args.lang, source_path=rel)
-        cache = {} if (args.all or repair_files is not None) else dict(state.chunk_cache(rel, args.lang, _job.CHUNKER_VERSION))
+        fresh = args.all or repair_files is not None
+        cache = {} if fresh else dict(state.chunk_cache(rel, args.lang, _job.CHUNKER_VERSION))
 
         slug = slugify_path(rel, args.lang)
         reused, todo = {}, []
@@ -164,7 +168,8 @@ def main() -> int:
                 "source": ch["source"],
                 "prompt": ch["prompt"] + A.glossary_prompt(hits, args.lang),
                 "instructions": ch.get("instructions", ""),
-                "result_path": f"{rel_state_dir(root, state_dir)}/work/{run_id}/results/{task_id}.json",
+                "result_path":
+                    f"{rel_state_dir(root, state_dir)}/work/{run_id}/results/{task_id}.json",
             }
             (work / "tasks" / f"{task_id}.json").write_text(
                 json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
@@ -208,7 +213,8 @@ def main() -> int:
     if args.json:
         print(json.dumps(plan, ensure_ascii=False, indent=2))
     else:
-        print(f"run {run_id}  layout={layout.style}:{layout.pattern} (conf {layout.confidence:.2f})")
+        print(f"run {run_id}  layout={layout.style}:{layout.pattern} "
+              f"(conf {layout.confidence:.2f})")
         for f in files_out:
             print(f"  {f['status']:11s} {f['file']} -> {f['target']}"
                   f"  tasks={f.get('tasks', 0)} reused={f.get('reused', 0)}")

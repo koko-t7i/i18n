@@ -17,8 +17,6 @@ on the next clone. So :func:`warn_if_ignored` checks and says so, and ``--state-
 as the escape hatch.
 """
 
-from __future__ import annotations
-
 import os
 import subprocess
 import sys

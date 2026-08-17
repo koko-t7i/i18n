@@ -10,8 +10,8 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "i18n" / "scripts"))
-import _paths as P  # noqa: E402
-from _state import State  # noqa: E402
+import _paths as P
+from _state import State
 
 #: Everything resolve_state_dir consults. Cleared per-test, or the answers would depend on
 #: which harness happens to be running the suite.

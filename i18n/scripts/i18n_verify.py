@@ -7,8 +7,6 @@ Compares each translated document against its source. Findings carry a severity;
 Exit codes: 0 pass (warnings allowed) | 1 blocking findings | 2 error | 3 nothing to verify
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import sys
@@ -17,9 +15,9 @@ from urllib.parse import unquote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import _adapter as A  # noqa: E402
-from _paths import add_state_dir_arg, resolve_state_dir, run_main  # noqa: E402
-from _state import State, file_sha  # noqa: E402
+import _adapter as A
+from _paths import add_state_dir_arg, resolve_state_dir, run_main
+from _state import State
 
 EXTERNAL = A._EXTERNAL_RE
 
@@ -90,7 +88,8 @@ def verify_pair(src_text: str, tgt_text: str, lang: str, rel: str, terms: list,
     slugs = set(t["heading_slugs"])
     for a in t["anchors"]:
         if a and a not in slugs and a in set(s["anchors"]):
-            add("X-ANCHOR", "warn", f"internal anchor #{a} does not match any heading in the translation")
+            add("X-ANCHOR", "warn",
+                f"internal anchor #{a} does not match any heading in the translation")
 
     if t["chatter"]:
         add("X-CHATTER", "error", "translation contains model preamble/chatter")
@@ -101,7 +100,8 @@ def verify_pair(src_text: str, tgt_text: str, lang: str, rel: str, terms: list,
 
     if target_abs is not None:
         for url in dead_local_links(tgt_text, target_abs):
-            add("X-DEADLINK", "warn", f"relative link {url!r} does not resolve from the translation")
+            add("X-DEADLINK", "warn",
+                f"relative link {url!r} does not resolve from the translation")
 
     f.extend({**g, "file": rel} for g in A.check_glossary(src_text, tgt_text, terms, lang, rel))
     return f
@@ -154,7 +154,7 @@ def main() -> int:
         pairs.append((rel, e["target"]))
 
     if not pairs:
-        msg = "nothing to verify: no recorded translations for %s" % args.lang
+        msg = f"nothing to verify: no recorded translations for {args.lang}"
         print(json.dumps({"status": "empty", "message": msg}) if args.json else msg)
         return 3
 
@@ -175,7 +175,6 @@ def main() -> int:
             args.lang, rel, terms, target_abs=tgt,
         ))
         checked += 1
-
 
     n_err = sum(1 for f in findings if f["severity"] == "error")
     n_warn = sum(1 for f in findings if f["severity"] == "warn")
@@ -198,7 +197,8 @@ def main() -> int:
             extra = ""
             if "expected" in f:
                 extra = f"\n        expected={f['expected']!r}\n        actual  ={f['actual']!r}"
-            print(f"  {f['severity'].upper():5s} {f['code']:16s} {f['file']}: {f['message']}{extra}")
+            print(f"  {f['severity'].upper():5s} {f['code']:16s} "
+                  f"{f['file']}: {f['message']}{extra}")
     return 1 if blocking else 0
 
 

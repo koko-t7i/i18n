@@ -17,8 +17,12 @@ Two dependencies, supplied per-run, nothing installed globally.
 | `markdown-it-py` | CommonMark-accurate fence detection | `_md` falls back to a regex scanner and warns once |
 | `pyyaml` | `.yaml` resource files | that path stops rather than hand-parsing |
 
-Without `uv`, `run.sh` falls back to the system `python3` and prints a note. That path works
-only as far as the interpreter's own libraries go. The regex fallback mis-slices fences
+The scripts need Python 3.13. `uv` fetches it, so the system interpreter does not have to be
+current; without `uv`, `run.sh` checks the system `python3` and refuses an older one rather
+than failing partway through a run.
+
+That fallback path also works only as far as the interpreter's own libraries go, and prints a
+note saying so. The regex fallback mis-slices fences
 nested inside blockquotes (`> ```bash`) or list items, so the unit tests skip the
 container-nesting cases when the parser is absent.
 
